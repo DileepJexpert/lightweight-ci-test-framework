@@ -1,0 +1,8 @@
+{
+  "correlationId": "#(correlationId)",
+  "customerId": "smoke-customer",
+  "firstName": "Smoke",
+  "lastName": "Test",
+  "email": "smoke.customer@example.test",
+  "source": "SALESFORCE"
+}

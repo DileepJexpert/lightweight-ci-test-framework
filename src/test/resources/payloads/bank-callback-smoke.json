@@ -1,0 +1,6 @@
+{
+  "correlationId": "#(correlationId)",
+  "customerId": "smoke-bank-customer",
+  "accountNumber": "smoke-account",
+  "requestType": "CUSTOMER_VERIFICATION"
+}
