@@ -7,6 +7,7 @@ function fn() {
 
   karate.configure('connectTimeout', Number(karate.properties['http.connect-timeout-ms'] || '5000'));
   karate.configure('readTimeout', Number(karate.properties['http.read-timeout-ms'] || '15000'));
+  karate.configure('retry', { count: 10, interval: 250 });
   karate.configure('logPrettyRequest', true);
   karate.configure('logPrettyResponse', true);
 

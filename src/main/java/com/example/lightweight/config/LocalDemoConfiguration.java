@@ -82,6 +82,13 @@ public class LocalDemoConfiguration {
             public java.util.Optional<com.example.lightweight.domain.LoanApplicationResult> findByLoanId(String loanId) {
                 return java.util.Optional.ofNullable(applications.get(loanId));
             }
+
+            @Override
+            public java.util.Optional<com.example.lightweight.domain.LoanApplicationResult> findByIdempotencyKey(String idempotencyKey) {
+                return applications.values().stream()
+                        .filter(application -> idempotencyKey.equals(application.idempotencyKey()))
+                        .findFirst();
+            }
         };
     }
 

@@ -12,6 +12,7 @@ public record LoanApplicationRequest(
         @Positive BigDecimal requestedAmount,
         @Min(300) int creditScore,
         @Positive BigDecimal monthlyIncome,
-        @Positive BigDecimal monthlyDebt
+        @Positive BigDecimal monthlyDebt,
+        String processingMode
 ) {
 }

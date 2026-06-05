@@ -8,4 +8,6 @@ public interface LoanApplicationRepository {
     void save(LoanApplicationResult result);
 
     Optional<LoanApplicationResult> findByLoanId(String loanId);
+
+    Optional<LoanApplicationResult> findByIdempotencyKey(String idempotencyKey);
 }

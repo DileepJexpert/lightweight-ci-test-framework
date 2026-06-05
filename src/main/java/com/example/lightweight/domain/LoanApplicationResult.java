@@ -9,6 +9,8 @@ public record LoanApplicationResult(
         LoanStatus status,
         LoanDecision decision,
         String reason,
+        String offerId,
+        String idempotencyKey,
         List<LoanStep> timeline
 ) {
 }

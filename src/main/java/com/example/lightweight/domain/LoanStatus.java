@@ -2,8 +2,15 @@ package com.example.lightweight.domain;
 
 public enum LoanStatus {
     INITIATED,
+    KYC_VERIFIED,
+    CREDIT_CHECK_PENDING,
+    CREDIT_CHECK_COMPLETED,
+    FRAUD_SCREENED,
     ELIGIBILITY_CHECKED,
     UNDERWRITING_COMPLETED,
+    MANUAL_REVIEW,
+    OFFER_GENERATED,
+    APPROVAL_REVERSED,
     APPROVED,
     REJECTED
 }

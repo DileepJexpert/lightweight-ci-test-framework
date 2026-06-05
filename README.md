@@ -106,13 +106,22 @@ Run Karate against the local demo service from a second terminal:
 mvn verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=http://localhost:8080" "-Dauth.token=local-token"
 ```
 
-The smoke suite now includes a full business-flow feature:
+The smoke suite includes a management-ready digital loan origination feature:
 
 ```text
-src/test/java/karate/features/business/loan-application-flow.feature
+src/test/java/karate/features/business/digital-loan-origination.feature
 ```
 
-That feature starts a loan by REST, verifies eligibility and underwriting timeline steps, then checks the final approved or rejected result.
+It demonstrates six complete business outcomes:
+
+- straight-through approval with KYC, credit, fraud, underwriting, and offer generation
+- automated rejection with traceable policy reasons
+- manual review followed by reviewer approval
+- asynchronous credit-bureau timeout recovery using Karate `retry until`
+- duplicate REST submission protected by an idempotency key
+- offer-generation failure followed by compensation and approval reversal
+
+The feature also demonstrates reusable feature calls, dynamic test data, request chaining, headers, multiple REST methods, timeline assertions, tags, polling, and HTML reporting.
 
 Run only the loan business flow:
 
