@@ -5,8 +5,10 @@ import com.example.lightweight.domain.KycResponse;
 import com.example.lightweight.domain.KycStatus;
 import com.example.lightweight.kafka.EventPublisher;
 import com.example.lightweight.repository.ProcessedEventRepository;
+import com.example.lightweight.repository.LoanApplicationRepository;
 import com.example.lightweight.service.CustomerVerificationService;
 import com.example.lightweight.service.EventDecisionService;
+import com.example.lightweight.service.LoanApplicationService;
 import com.example.lightweight.service.PaymentProcessingService;
 import com.example.lightweight.validation.EventValidator;
 import org.slf4j.Logger;
@@ -65,6 +67,27 @@ public class LocalDemoConfiguration {
                 processedEventIds.add(eventId);
             }
         };
+    }
+
+    @Bean
+    LoanApplicationRepository loanApplicationRepository() {
+        ConcurrentHashMap<String, com.example.lightweight.domain.LoanApplicationResult> applications = new ConcurrentHashMap<>();
+        return new LoanApplicationRepository() {
+            @Override
+            public void save(com.example.lightweight.domain.LoanApplicationResult result) {
+                applications.put(result.loanId(), result);
+            }
+
+            @Override
+            public java.util.Optional<com.example.lightweight.domain.LoanApplicationResult> findByLoanId(String loanId) {
+                return java.util.Optional.ofNullable(applications.get(loanId));
+            }
+        };
+    }
+
+    @Bean
+    LoanApplicationService loanApplicationService(LoanApplicationRepository repository) {
+        return new LoanApplicationService(repository);
     }
 
     @Bean

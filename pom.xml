@@ -19,6 +19,7 @@
         <assertj.version>3.27.2</assertj.version>
         <karate.version>1.5.1</karate.version>
         <jackson.version>2.18.2</jackson.version>
+        <skip.unit.tests>false</skip.unit.tests>
         <skip.karate.tests>true</skip.karate.tests>
     </properties>
 
@@ -112,6 +113,7 @@
                     <excludes>
                         <exclude>**/KarateSmokeTestRunner.java</exclude>
                     </excludes>
+                    <skipTests>${skip.unit.tests}</skipTests>
                     <systemPropertyVariables>
                         <karate.env>${karate.env}</karate.env>
                         <karate.options>${karate.options}</karate.options>
@@ -148,19 +150,21 @@
         <profile>
             <id>unit</id>
             <properties>
+                <skip.unit.tests>false</skip.unit.tests>
                 <skip.karate.tests>true</skip.karate.tests>
             </properties>
         </profile>
         <profile>
             <id>component</id>
             <properties>
+                <skip.unit.tests>false</skip.unit.tests>
                 <skip.karate.tests>true</skip.karate.tests>
             </properties>
         </profile>
         <profile>
             <id>smoke</id>
             <properties>
-                <skipTests>true</skipTests>
+                <skip.unit.tests>true</skip.unit.tests>
                 <skip.karate.tests>false</skip.karate.tests>
                 <karate.options>--tags @smoke</karate.options>
             </properties>
@@ -168,6 +172,7 @@
         <profile>
             <id>all</id>
             <properties>
+                <skip.unit.tests>false</skip.unit.tests>
                 <skip.karate.tests>false</skip.karate.tests>
             </properties>
         </profile>

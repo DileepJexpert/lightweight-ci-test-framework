@@ -106,6 +106,20 @@ Run Karate against the local demo service from a second terminal:
 mvn verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=http://localhost:8080" "-Dauth.token=local-token"
 ```
 
+The smoke suite now includes a full business-flow feature:
+
+```text
+src/test/java/karate/features/business/loan-application-flow.feature
+```
+
+That feature starts a loan by REST, verifies eligibility and underwriting timeline steps, then checks the final approved or rejected result.
+
+Run only the loan business flow:
+
+```bash
+mvn verify -Psmoke "-Dkarate.options=--tags @loan"
+```
+
 From IntelliJ:
 
 1. Run `LightweightTestApplication`.
@@ -202,6 +216,7 @@ This runs:
 - Kafka handler tests by direct method invocation
 - validation tests
 - duplicate/idempotency tests
+- loan approval/rejection business-flow service tests
 
 Post-deployment stage:
 
@@ -240,6 +255,7 @@ Supported smoke environments:
 - duplicate event does not call third-party client and does not publish duplicate output.
 - Kafka consumer logic is tested by invoking handler methods directly, without Kafka.
 - correlation ID is asserted from input request/event to output event.
+- loan application flow moves from initiation to eligibility, underwriting, and final approval or rejection.
 
 ## Adding Component Tests
 
