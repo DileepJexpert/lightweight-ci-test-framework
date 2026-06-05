@@ -16,8 +16,8 @@
               <option value="clean" />
               <option value="verify" />
               <option value="-Dkarate.env=qa" />
-              <option value="-Dservice.base-url=replace-me" />
-              <option value="-Dauth.token=replace-me" />
+              <option value="-Dservice.base-url=http://localhost:8080" />
+              <option value="-Dauth.token=local-token" />
             </list>
           </option>
           <option name="pomFileName" />

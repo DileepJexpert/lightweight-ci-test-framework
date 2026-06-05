@@ -110,7 +110,9 @@ From IntelliJ:
 
 1. Run `LightweightTestApplication`.
 2. Run `KarateSmokeTestRunner`.
-3. Add these VM options to the Karate runner:
+3. No VM options are needed for the local demo because Karate defaults to `http://localhost:8080`.
+
+Optional VM options if you want to be explicit:
 
 ```text
 -Dkarate.env=qa -Dservice.base-url=http://localhost:8080 -Dauth.token=local-token
@@ -181,7 +183,7 @@ target/karate-reports
 If you see this error, the runner is configured correctly but the target URL still needs to be set:
 
 ```text
-Missing real smoke test base URL. Set -Dservice.base-url=...
+Invalid smoke test base URL. Replace placeholders with a real URL or use http://localhost:8080 for the local demo service.
 ```
 
 ## CI/CD Usage
