@@ -73,6 +73,56 @@ Run selected Karate tags:
 mvn verify -Psmoke -Dkarate.options="--tags @smoke --tags ~@negative"
 ```
 
+## Running Only Karate Tests From IntelliJ
+
+Karate tests in this project are deployed-environment smoke tests. They do not run during the normal component-test build. You can run only Karate from IntelliJ in either of these ways.
+
+### Option 1: Run The Maven Smoke Profile
+
+1. Open this folder in IntelliJ: `lightweight-ci-test-framework`.
+2. Make sure IntelliJ uses JDK 21.
+3. Open the Maven tool window.
+4. Create or run this Maven command:
+
+```bash
+clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
+```
+
+Use your real QA/SIT/UAT service URL. If the endpoint does not need a token, omit `-Dauth.token=...`.
+
+To run only selected Karate tags from IntelliJ Maven:
+
+```bash
+verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dkarate.options="--tags @smoke --tags ~@negative"
+```
+
+### Option 2: Run The JUnit Karate Runner
+
+1. Open `src/test/java/karate/runner/KarateSmokeTestRunner.java`.
+2. Right-click the class.
+3. Select `Run KarateSmokeTestRunner`.
+4. Edit the run configuration and add VM options:
+
+```text
+-Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
+```
+
+To filter tags from the JUnit runner, add:
+
+```text
+-Dkarate.options="--tags @smoke"
+```
+
+### Important
+
+Do not run individual `.feature` files directly unless the Karate IntelliJ plugin is configured correctly. The most reliable IntelliJ options are the Maven `smoke` profile or the JUnit runner class.
+
+Karate reports are generated under:
+
+```text
+target/karate-reports
+```
+
 ## CI/CD Usage
 
 Build stage:
