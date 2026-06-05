@@ -66,21 +66,60 @@ mvn clean test -Punit
 Run deployed-environment Karate smoke tests:
 
 ```bash
-mvn clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
+mvn clean verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=https://your-real-qa-service-host" "-Dauth.token=your-token"
 ```
 
 Run Karate against a service running locally:
 
 ```bash
-mvn clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=http://localhost:8080
+mvn clean verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=http://localhost:8080"
 ```
 
 Karate requires a real HTTP service URL. If no service is running at the configured URL, Karate should fail because smoke tests are meant to test a deployed or locally running service.
 
+## Running The Local Demo Service
+
+This repository includes a small Spring Boot demo application so developers can try the Karate smoke tests locally. It is not a replacement for your real microservice; it only exposes sample endpoints used by the smoke features.
+
+Start the demo service in one terminal:
+
+```bash
+mvn spring-boot:run
+```
+
+The service starts on:
+
+```text
+http://localhost:8080
+```
+
+Verify it manually:
+
+```bash
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/api/customers/smoke/status
+```
+
+Run Karate against the local demo service from a second terminal:
+
+```bash
+mvn verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=http://localhost:8080" "-Dauth.token=local-token"
+```
+
+From IntelliJ:
+
+1. Run `LightweightTestApplication`.
+2. Run `KarateSmokeTestRunner`.
+3. Add these VM options to the Karate runner:
+
+```text
+-Dkarate.env=qa -Dservice.base-url=http://localhost:8080 -Dauth.token=local-token
+```
+
 Run both component and smoke tests:
 
 ```bash
-mvn clean verify -Pall -Dkarate.env=sit -Dservice.base-url=https://sit-service.example.internal
+mvn clean verify -Pall "-Dkarate.env=sit" "-Dservice.base-url=https://sit-service.example.internal"
 ```
 
 Run selected Karate tags:
@@ -101,7 +140,7 @@ Karate tests in this project are deployed-environment smoke tests. They do not r
 4. Create or run this Maven command:
 
 ```bash
-clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://your-real-qa-service-host -Dauth.token=your-token
+clean verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=https://your-real-qa-service-host" "-Dauth.token=your-token"
 ```
 
 Use your real QA/SIT/UAT service URL. If the endpoint does not need a token, omit `-Dauth.token=...`.
@@ -109,7 +148,7 @@ Use your real QA/SIT/UAT service URL. If the endpoint does not need a token, omi
 To run only selected Karate tags from IntelliJ Maven:
 
 ```bash
-verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://your-real-qa-service-host -Dkarate.options="--tags @smoke --tags ~@negative"
+verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=https://your-real-qa-service-host" "-Dkarate.options=--tags @smoke --tags ~@negative"
 ```
 
 ### Option 2: Run The JUnit Karate Runner
@@ -165,7 +204,7 @@ This runs:
 Post-deployment stage:
 
 ```bash
-mvn clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=$SERVICE_BASE_URL -Dauth.token=$AUTH_TOKEN
+mvn clean verify -Psmoke "-Dkarate.env=qa" "-Dservice.base-url=$SERVICE_BASE_URL" "-Dauth.token=$AUTH_TOKEN"
 ```
 
 This runs Karate against an already deployed environment. It does not start Docker, Kafka, WireMock, or any local process.
