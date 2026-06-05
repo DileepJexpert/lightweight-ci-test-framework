@@ -16,7 +16,7 @@
               <option value="clean" />
               <option value="verify" />
               <option value="-Dkarate.env=qa" />
-              <option value="-Dservice.base-url=https://qa-service.example.internal" />
+              <option value="-Dservice.base-url=replace-me" />
               <option value="-Dauth.token=replace-me" />
             </list>
           </option>

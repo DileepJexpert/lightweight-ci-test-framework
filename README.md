@@ -43,6 +43,14 @@ src/test/resources
 
 ## Maven Profiles
 
+Run local developer verification without any external service:
+
+```bash
+mvn clean test -Pcomponent
+```
+
+This is the default local check for this lightweight framework. It runs JUnit, Mockito, MockMvc, validation, service, idempotency, and direct Kafka-handler tests. It does not need Docker, Kafka, WireMock, or a running Spring Boot service.
+
 Run CI-safe component tests only:
 
 ```bash
@@ -60,6 +68,14 @@ Run deployed-environment Karate smoke tests:
 ```bash
 mvn clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
 ```
+
+Run Karate against a service running locally:
+
+```bash
+mvn clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=http://localhost:8080
+```
+
+Karate requires a real HTTP service URL. If no service is running at the configured URL, Karate should fail because smoke tests are meant to test a deployed or locally running service.
 
 Run both component and smoke tests:
 
@@ -85,7 +101,7 @@ Karate tests in this project are deployed-environment smoke tests. They do not r
 4. Create or run this Maven command:
 
 ```bash
-clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
+clean verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://your-real-qa-service-host -Dauth.token=your-token
 ```
 
 Use your real QA/SIT/UAT service URL. If the endpoint does not need a token, omit `-Dauth.token=...`.
@@ -93,7 +109,7 @@ Use your real QA/SIT/UAT service URL. If the endpoint does not need a token, omi
 To run only selected Karate tags from IntelliJ Maven:
 
 ```bash
-verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dkarate.options="--tags @smoke --tags ~@negative"
+verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://your-real-qa-service-host -Dkarate.options="--tags @smoke --tags ~@negative"
 ```
 
 ### Option 2: Run The JUnit Karate Runner
@@ -104,7 +120,7 @@ verify -Psmoke -Dkarate.env=qa -Dservice.base-url=https://qa-service.example.int
 4. Edit the run configuration and add VM options:
 
 ```text
--Dkarate.env=qa -Dservice.base-url=https://qa-service.example.internal -Dauth.token=replace-me
+-Dkarate.env=qa -Dservice.base-url=https://your-real-qa-service-host -Dauth.token=your-token
 ```
 
 To filter tags from the JUnit runner, add:
@@ -121,6 +137,12 @@ Karate reports are generated under:
 
 ```text
 target/karate-reports
+```
+
+If you see this error, the runner is configured correctly but the target URL still needs to be set:
+
+```text
+Missing real smoke test base URL. Set -Dservice.base-url=...
 ```
 
 ## CI/CD Usage
