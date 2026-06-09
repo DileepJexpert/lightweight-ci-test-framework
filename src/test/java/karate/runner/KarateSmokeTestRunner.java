@@ -6,6 +6,6 @@ class KarateSmokeTestRunner {
 
     @Karate.Test
     Karate runSmokeFeatures() {
-        return Karate.run("classpath:karate/features").relativeTo(getClass());
+        return Karate.run("classpath:karate/features").tags("~@ignore").relativeTo(getClass());
     }
 }

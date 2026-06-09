@@ -1,3 +1,4 @@
+@ignore
 Feature: Submit a loan application
 
   Scenario:
