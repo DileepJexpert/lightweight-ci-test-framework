@@ -13,6 +13,12 @@ Restricted CI runners often cannot start Docker, containerized dependencies, emb
 
 Use a full integration framework separately when you need real Kafka broker behavior, real topic serialization, consumer groups, retries, DLT wiring, containerized dependencies, or third-party HTTP contract behavior.
 
+For a management-facing comparison of Karate, Cucumber, and JUnit, see:
+
+```text
+docs/karate-cucumber-junit-management-comparison.md
+```
+
 ## Project Structure
 
 ```text
