@@ -1,0 +1,61 @@
+{
+  "profiles": {
+    "prime": {
+      "mode": "STANDARD",
+      "creditScore": 780,
+      "monthlyIncome": 110000,
+      "monthlyDebt": 18000,
+      "requestedAmount": 900000,
+      "expectedStatus": "APPROVED",
+      "expectedDecision": "APPROVED"
+    },
+    "subprime": {
+      "mode": "STANDARD",
+      "creditScore": 650,
+      "monthlyIncome": 45000,
+      "monthlyDebt": 26000,
+      "requestedAmount": 1500000,
+      "expectedStatus": "REJECTED",
+      "expectedDecision": "REJECTED"
+    },
+    "borderline": {
+      "mode": "MANUAL_REVIEW",
+      "creditScore": 710,
+      "monthlyIncome": 65000,
+      "monthlyDebt": 22000,
+      "requestedAmount": 650000,
+      "expectedStatus": "MANUAL_REVIEW",
+      "expectedDecision": "MANUAL_REVIEW"
+    }
+  },
+  "bulkSubmissions": [
+    {
+      "mode": "STANDARD",
+      "creditScore": 780,
+      "monthlyIncome": 110000,
+      "monthlyDebt": 18000,
+      "requestedAmount": 900000,
+      "label": "prime-bulk-1"
+    },
+    {
+      "mode": "STANDARD",
+      "creditScore": 720,
+      "monthlyIncome": 85000,
+      "monthlyDebt": 15000,
+      "requestedAmount": 700000,
+      "label": "prime-bulk-2"
+    },
+    {
+      "mode": "STANDARD",
+      "creditScore": 650,
+      "monthlyIncome": 45000,
+      "monthlyDebt": 26000,
+      "requestedAmount": 1500000,
+      "label": "subprime-bulk-1"
+    }
+  ],
+  "invalidProfiles": [
+    { "creditScore": -1,  "monthlyIncome": 0,     "monthlyDebt": 0,     "requestedAmount": 0 },
+    { "creditScore": 750, "monthlyIncome": 100000, "monthlyDebt": 50000, "requestedAmount": -5000 }
+  ]
+}
