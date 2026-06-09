@@ -217,46 +217,35 @@ This means even if someone accidentally points Karate at production, the service
 
 ---
 
-## Production Smoke Feature — What It Looks Like
+## Production Smoke Feature Files (in this repo)
 
-```gherkin
-@prod-safe @smoke @health
-Feature: Production deployment health checks
+Four feature files are in `src/test/java/karate/features/prod-smoke/`:
 
-  # These are the ONLY scenarios that run in production.
-  # No data is created. No state is changed.
+| Feature File | What It Validates | Scenarios |
+|---|---|---|
+| `health-readiness.feature` | `/actuator/health`, liveness probe, readiness probe, SLA | 3 |
+| `auth-validation.feature` | 401 without token, 200 with valid token, malformed token | 3 |
+| `api-connectivity.feature` | Ingress routing, 404 proves route works, Content-Type header | 3 |
+| `performance-sla.feature` | Response time gates: health 500ms, status 1000ms, auth 1500ms | 4 |
 
-  Scenario: Service health endpoint is UP
-    Given url baseUrl + '/actuator/health'
-    When method get
-    Then status 200
-    And match response.status == 'UP'
-    * assert responseTime < 500
+All 13 scenarios are `@prod-safe` — zero writes, zero data created.
 
-  Scenario: Service version endpoint responds
-    Given url baseUrl + '/actuator/info'
-    When method get
-    Then status 200
-    And match response contains { build: '#object' }
+Run them against any environment:
+```bash
+# Against production
+mvn verify -Psmoke \
+  -Dservice.base-url=https://loan-api.company.com \
+  -Dkarate.env=production \
+  -Dauth.token=${EKS_AUTH_TOKEN} \
+  -Dkarate.options="--tags @prod-safe"
 
-  Scenario: Auth layer rejects unauthenticated requests
-    Given url baseUrl + '/api/loans'
-    When method get
-    Then status 401
-
-  Scenario: Auth layer accepts valid token
-    Given url baseUrl + '/api/loans'
-    And header Authorization = 'Bearer ' + authToken
-    When method get
-    Then status 200
-    * assert responseTime < 1000
-
-  Scenario: Ingress routing — service is reachable at expected path
-    Given url baseUrl + '/actuator/health/readiness'
-    When method get
-    Then status 200
-    And match response.status == 'READY'
+# Against local service to verify they work first
+mvn verify -Psmoke \
+  -Dkarate.options="--tags @prod-safe"
 ```
+
+The dedicated runner `KarateProdSmokeRunner.java` runs only `prod-smoke/` with `@prod-safe` tag,
+making it impossible to accidentally include write scenarios.
 
 ---
 
