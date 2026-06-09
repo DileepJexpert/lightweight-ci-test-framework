@@ -89,6 +89,8 @@ Feature: Loan API response headers and performance SLA assertions
     Given url baseUrl + '/actuator/health'
     When method get
     Then status 200
-    And match header Content-Type contains 'application/json'
+    # Spring Boot Actuator uses its own media type: application/vnd.spring-boot.actuator.v3+json
+    # Use 'contains json' to handle both standard and vendor-specific JSON content types.
+    And match header Content-Type contains 'json'
     * print 'Health check response time (ms):', responseTime
     * assert responseTime < 500
