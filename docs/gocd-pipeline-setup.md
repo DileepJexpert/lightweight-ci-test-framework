@@ -5,6 +5,40 @@
 
 ---
 
+## Why Run Karate AFTER Deployment? (The Most Common Question)
+
+> **"If we already have unit tests, what does Karate add after the pod is up?"**
+
+Unit/component tests prove your **code** is correct.
+Karate smoke tests prove your **deployment** is correct.
+These are two completely different failure modes.
+
+| What Gets Tested | Unit / Component Tests (Stage 1) | Karate Smoke Tests (Stage 4) |
+|---|---|---|
+| Business logic correct | ✅ | ✅ (via real API call) |
+| Code compiles | ✅ | — |
+| Validation rules work | ✅ | ✅ (negative scenarios) |
+| Mocked dependencies pass | ✅ | — |
+| **Pod actually started in EKS** | ❌ | ✅ |
+| **ConfigMap / Secrets mounted correctly** | ❌ | ✅ |
+| **Database connection string correct** | ❌ | ✅ |
+| **External service URLs reachable from pod** | ❌ | ✅ |
+| **Ingress / Load balancer routing works** | ❌ | ✅ |
+| **SSL certificate valid** | ❌ | ✅ |
+| **Auth token accepted by live service** | ❌ | ✅ |
+| **Real response times within SLA** | ❌ | ✅ |
+| **Environment variable injected correctly** | ❌ | ✅ |
+
+**Real example of what only Karate catches:**
+- All 200 unit tests pass ✅
+- Pod deploys to EKS ✅
+- Pod crashes on startup because `DB_PASSWORD` secret was not mounted → Karate `POST /api/loans` returns 500 → pipeline fails → team alerted within 3 minutes → production never affected
+
+> A correct codebase deployed incorrectly is still an outage.
+> Unit tests cannot catch deployment failures. Karate can.
+
+---
+
 ## How It Fits in the Delivery Pipeline
 
 ```
