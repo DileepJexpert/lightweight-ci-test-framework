@@ -52,11 +52,13 @@ Feature: Loan API response schema and type validation
       }
       """
 
-    # match each — every element of the array must satisfy this schema
-    * match each application.timeline == { name: '#string', outcome: '#string' }
+    # match each contains — partial schema: each element must have AT LEAST these fields.
+    # Use 'contains' (not ==) when you want to validate a subset of fields and
+    # ignore additional fields the API may return (status, reason, etc.).
+    * match each application.timeline contains { name: '#string', outcome: '#string' }
 
-    # #? predicate — inline JS condition that must return true
-    * match each application.timeline == { name: '#? _.length > 0', outcome: '#? _.length > 0' }
+    # #? predicate — inline JS condition per field value
+    * match each application.timeline contains { name: '#? _.length > 0', outcome: '#? _.length > 0' }
 
     # Straight-through approval always produces exactly 8 pipeline steps
     * assert application.timeline.length == 8
@@ -91,8 +93,10 @@ Feature: Loan API response schema and type validation
   Scenario: Timeline entries are consistently typed across all processing modes
     * def application = submitLoan('OFFER_FAILURE', 790, 120000, 15000, 950000, newId('idem'))
 
-    # Reference schema variable — reuse the same schema in match
-    * def timelineItemSchema = { name: '#string', outcome: '#string' }
+    # Full schema variable — strict == requires ALL fields to be listed.
+    # The actual timeline item has 4 fields: name, status, outcome, reason.
+    # This demonstrates strict schema validation vs the 'contains' partial approach above.
+    * def timelineItemSchema = { name: '#string', status: '#string', outcome: '#string', reason: '#string' }
     * match application.timeline == '#[] timelineItemSchema'
 
     # karate.jsonPath() — full JsonPath expression for precise extraction
