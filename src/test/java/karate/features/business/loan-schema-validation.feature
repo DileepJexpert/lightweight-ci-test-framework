@@ -105,6 +105,12 @@ Feature: Loan API response schema and type validation
     * assert compensationStep.length == 1
     * match compensationStep[0].outcome == 'COMPLETED'
 
-    # Verify approval reversal is present
-    * def reversedStatus = karate.jsonPath(application, "$.timeline[?(@.outcome == 'REVERSED')]")
-    * assert reversedStatus.length > 0
+    # 'REVERSED' is the application-level decision, not a timeline step outcome.
+    # Timeline step outcomes are FAIL / COMPLETED. Use karate.jsonPath() on the
+    # top-level response to verify the overall decision was reversed.
+    * match application.decision == 'REVERSED'
+    * match application.status   == 'APPROVAL_REVERSED'
+
+    # Also confirm via JsonPath that the offer generation step itself recorded FAIL
+    * def offerFailStep = karate.jsonPath(application, "$.timeline[?(@.name == 'OFFER_GENERATION' && @.outcome == 'FAIL')]")
+    * assert offerFailStep.length == 1
