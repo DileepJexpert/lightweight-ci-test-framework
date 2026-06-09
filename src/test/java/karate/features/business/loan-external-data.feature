@@ -51,11 +51,17 @@ Feature: Loan applications driven from external data files
     * match application.decision == profile.expectedDecision
 
   Scenario: Bulk submissions — karate.map() to submit, karate.filter() to group results
-    # karate.map() iterates the array and returns a new array of transformed elements
-    * def results = karate.map(borrowers.bulkSubmissions, function(profile){
+    # Multi-line JS functions must be defined with triple quotes first,
+    # then passed by reference to karate.map() / karate.filter()
+    * def mapFn =
+      """
+      function(profile) {
         var app = submitProfile(profile, newId('idem'));
         return { label: profile.label, status: app.status, loanId: app.loanId }
-      })
+      }
+      """
+    # karate.map() iterates the array and returns a new array of transformed elements
+    * def results = karate.map(borrowers.bulkSubmissions, mapFn)
 
     * print 'All bulk results:', results
 

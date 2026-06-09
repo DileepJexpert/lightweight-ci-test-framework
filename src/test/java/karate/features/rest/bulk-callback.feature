@@ -21,13 +21,18 @@ Feature: Bulk Salesforce callback processing
       | newId('corr')  | newId('cust')  | 'Carol'   | 'White'  | 'carol@example.test'       | 'SALESFORCE' |
 
     # karate.map() iterates the array; returns a new array of { customerId, statusCode }
-    * def results = karate.map(customers, function(c){
+    # Multi-line JS must be defined with triple quotes and passed by reference
+    * def mapFn =
+      """
+      function(c) {
         var r = karate.call(
           'classpath:karate/features/rest/helpers/submit-callback.feature',
           { baseUrl: baseUrl, authToken: authToken, customer: c }
         );
         return { customerId: c.customerId, statusCode: r.statusCode }
-      })
+      }
+      """
+    * def results = karate.map(customers, mapFn)
 
     * print 'Bulk callback results:', results
 
@@ -48,13 +53,17 @@ Feature: Bulk Salesforce callback processing
       | newId('corr')  | ''         | 'Bad'     | 'User'   | 'not-an-email'| 'SALESFORCE' |
       | newId('corr')  | ''         | 'Also'    | 'Bad'    | 'no-at-sign'  | 'SALESFORCE' |
 
-    * def statusCodes = karate.map(invalidCustomers, function(c){
+    * def mapInvalidFn =
+      """
+      function(c) {
         var r = karate.call(
           'classpath:karate/features/rest/helpers/submit-callback.feature',
           { baseUrl: baseUrl, authToken: authToken, customer: c }
         );
         return r.statusCode
-      })
+      }
+      """
+    * def statusCodes = karate.map(invalidCustomers, mapInvalidFn)
 
     * print 'Invalid callback status codes:', statusCodes
 
@@ -67,7 +76,9 @@ Feature: Bulk Salesforce callback processing
       | 'CUSTOMER_VERIFICATION'    | newId('cust')  |
       | 'ACCOUNT_VALIDATION'       | newId('cust')  |
 
-    * def bankResults = karate.map(bankRequests, function(req){
+    * def mapBankFn =
+      """
+      function(req) {
         var corrId = newId('bank-corr');
         var body = {
           correlationId: corrId,
@@ -75,11 +86,12 @@ Feature: Bulk Salesforce callback processing
           accountNumber: 'ACC-' + corrId,
           requestType:   req.requestType
         };
-        karate.set('bankBody', body);
         var r = karate.call('classpath:karate/features/rest/helpers/submit-bank-callback.feature',
           { baseUrl: baseUrl, correlationId: corrId, requestBody: body });
         return { requestType: req.requestType, statusCode: r.statusCode }
-      })
+      }
+      """
+    * def bankResults = karate.map(bankRequests, mapBankFn)
 
     * print 'Bank callback results:', bankResults
     * def allOk = karate.filter(bankResults, function(r){ return r.statusCode == 200 })
