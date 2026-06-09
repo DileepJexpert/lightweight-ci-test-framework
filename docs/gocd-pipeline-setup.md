@@ -2,6 +2,9 @@
 
 > GoCD by ThoughtWorks — Pipeline as Code guide for the Karate smoke test suite.
 > Covers: pipeline stages, YAML config, environment variables, EKS health check, and troubleshooting.
+>
+> ⚠️ **Important:** Running Karate write tests against production will create real business records.
+> Read [`karate-production-safety.md`](./karate-production-safety.md) before wiring any production pipeline.
 
 ---
 

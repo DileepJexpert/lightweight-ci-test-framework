@@ -342,6 +342,22 @@ automatically is time saved and a production incident avoided.
 
 ---
 
+**Q: If Karate runs after deployment, won't it create real data in the production database?**
+
+A: Yes — if you run write scenarios (`POST /api/loans`, `POST /api/customers`) against a
+production URL, it will create real business records. This is the most important operational
+rule for Karate in a pipeline:
+
+- **QA / SIT:** Run the full Karate suite including write APIs and Kafka tests. Use test data markers (`source: KARATE_AUTOMATION`) so records can be cleaned up.
+- **Production:** Run only `@prod-safe` tagged features — health checks, auth validation, read-only endpoints. No `POST`, `PUT`, or `DELETE` scenarios.
+
+The GoCD production pipeline config uses: `-Dkarate.options=--tags @prod-safe`
+
+Full guardrail strategy with folder structure, tags, karate-config.js env guards,
+and production smoke feature examples: see [`karate-production-safety.md`](./karate-production-safety.md)
+
+---
+
 ## SECTION 5 — Quick one-liners for rapid-fire questions
 
 | Question | One-line answer |
