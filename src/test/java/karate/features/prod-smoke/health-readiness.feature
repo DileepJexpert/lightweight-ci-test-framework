@@ -37,5 +37,5 @@ Feature: Production health and readiness checks
     Given url baseUrl + '/actuator/health/readiness'
     When method get
     Then status 200
-    And match response.status == 'ACCEPTING_TRAFFIC'
+    And match response.status == 'UP'
     * assert responseTime < 500
