@@ -32,7 +32,8 @@ public class LoanApplicationService implements AutoCloseable {
 
     public LoanApplicationResult find(String loanId) {
         return repository.findByLoanId(loanId)
-                .orElseThrow(() -> new IllegalArgumentException("Loan application not found: " + loanId));
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Loan application not found: " + loanId));
     }
 
     public LoanApplicationResult review(String loanId, ManualReviewRequest review) {
