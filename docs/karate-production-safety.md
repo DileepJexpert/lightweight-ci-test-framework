@@ -232,20 +232,23 @@ All 13 scenarios are `@prod-safe` — zero writes, zero data created.
 
 Run them against any environment:
 ```bash
-# Against production
-mvn verify -Psmoke \
+# Against production — dedicated profile, runs ONLY KarateProdSmokeRunner
+mvn verify -Pprod-smoke \
   -Dservice.base-url=https://loan-api.company.com \
   -Dkarate.env=production \
-  -Dauth.token=${EKS_AUTH_TOKEN} \
-  -Dkarate.options="--tags @prod-safe"
+  -Dauth.token=${EKS_AUTH_TOKEN}
 
 # Against local service to verify they work first
-mvn verify -Psmoke \
-  -Dkarate.options="--tags @prod-safe"
+mvn verify -Pprod-smoke
+
+# Alternative: tag filter through the general smoke profile
+mvn verify -Psmoke -Dkarate.options="--tags @prod-safe"
 ```
 
-The dedicated runner `KarateProdSmokeRunner.java` runs only `prod-smoke/` with `@prod-safe` tag,
-making it impossible to accidentally include write scenarios.
+Prefer `-Pprod-smoke` for the production pipeline stage: it executes only
+`KarateProdSmokeRunner.java`, which is hard-wired to the `prod-smoke/` folder and the
+`@prod-safe` tag. Even a wrong `-Dkarate.options` tag filter cannot pull in write
+scenarios, because the runner never looks outside `prod-smoke/`.
 
 ---
 

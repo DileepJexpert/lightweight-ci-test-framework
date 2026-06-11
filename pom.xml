@@ -21,6 +21,7 @@
         <jackson.version>2.18.2</jackson.version>
         <skip.unit.tests>false</skip.unit.tests>
         <skip.karate.tests>true</skip.karate.tests>
+        <karate.runner>KarateSmokeTestRunner</karate.runner>
     </properties>
 
     <dependencyManagement>
@@ -126,7 +127,7 @@
                 <version>3.5.2</version>
                 <configuration>
                     <includes>
-                        <include>**/KarateSmokeTestRunner.java</include>
+                        <include>**/${karate.runner}.java</include>
                     </includes>
                     <skipITs>${skip.karate.tests}</skipITs>
                     <systemPropertyVariables>
@@ -167,6 +168,18 @@
                 <skip.unit.tests>true</skip.unit.tests>
                 <skip.karate.tests>false</skip.karate.tests>
                 <karate.options>--tags @smoke</karate.options>
+            </properties>
+        </profile>
+        <profile>
+            <!-- Production pipeline stage: runs ONLY the prod-safe runner.
+                 The runner is hard-wired to the prod-smoke/ folder and @prod-safe tag,
+                 so write scenarios cannot be included even by a wrong tag filter.
+                 Usage: mvn verify -Pprod-smoke -Dservice.base-url=https://... -->
+            <id>prod-smoke</id>
+            <properties>
+                <skip.unit.tests>true</skip.unit.tests>
+                <skip.karate.tests>false</skip.karate.tests>
+                <karate.runner>KarateProdSmokeRunner</karate.runner>
             </properties>
         </profile>
         <profile>

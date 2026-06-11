@@ -7,6 +7,8 @@ import com.example.lightweight.domain.LoanStatus;
 import com.example.lightweight.domain.LoanStep;
 import com.example.lightweight.domain.ManualReviewRequest;
 import com.example.lightweight.repository.LoanApplicationRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -32,14 +34,14 @@ public class LoanApplicationService implements AutoCloseable {
 
     public LoanApplicationResult find(String loanId) {
         return repository.findByLoanId(loanId)
-                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
-                        org.springframework.http.HttpStatus.NOT_FOUND, "Loan application not found: " + loanId));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Loan application not found: " + loanId));
     }
 
     public LoanApplicationResult review(String loanId, ManualReviewRequest review) {
         LoanApplicationResult current = find(loanId);
         if (current.status() != LoanStatus.MANUAL_REVIEW) {
-            throw new IllegalStateException("Loan is not awaiting manual review");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Loan is not awaiting manual review");
         }
         boolean approved = "APPROVE".equalsIgnoreCase(review.action());
         List<LoanStep> timeline = append(current.timeline(), new LoanStep(
