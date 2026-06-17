@@ -323,7 +323,7 @@ And match header Content-Type contains 'application/json'
 ---
 
 ## ✦ Enterprise Configuration (`karate-config.js`)
-**File:** `src/test/java/karate/resources/karate-config.js`
+**File:** `src/test/resources/karate-config.js`
 
 ### `configure headers` globally
 ```javascript

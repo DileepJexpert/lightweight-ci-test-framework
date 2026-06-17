@@ -392,4 +392,10 @@ mvn verify -Psmoke -B \
 mvn verify -Pall -B \
   -Dservice.base-url=${EKS_SERVICE_URL} \
   -Dauth.token=${EKS_AUTH_TOKEN}
+
+# Production stage — read-only smoke only (see docs/karate-production-safety.md)
+mvn verify -Pprod-smoke -B \
+  -Dservice.base-url=https://loan-api.company.com \
+  -Dkarate.env=production \
+  -Dauth.token=${EKS_AUTH_TOKEN}
 ```
