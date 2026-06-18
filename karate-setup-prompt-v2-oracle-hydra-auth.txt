@@ -1,0 +1,516 @@
+================================================================================
+  KARATE FRAMEWORK SETUP PROMPT
+  Version 2 — includes: Ory Hydra OAuth, @EnableAuth bypass, Oracle DB
+  Paste this entire prompt into your IntelliJ AI terminal (company hosted model)
+  on any existing Spring Boot project to generate a complete Karate test framework.
+================================================================================
+
+You are a senior test automation engineer. Your task is to set up a complete,
+production-ready Karate test framework for this existing Spring Boot project.
+
+The project has THREE infrastructure concerns you must handle:
+  A. Oracle database connectivity
+  B. Ory Hydra OAuth2 — every endpoint protected by a Bearer token
+  C. A custom @EnableAuth annotation on controller methods that controls auth enforcement
+     — this must be bypassable for test environments without modifying production code
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1 — ANALYSE THE PROJECT FIRST
+────────────────────────────────────────────────────────────────────────────────
+Before writing anything, read and understand:
+- All @RestController classes (every endpoint: HTTP method, path, request body,
+  required headers, all response codes — note which methods have @EnableAuth)
+- All domain/model/DTO/entity/record classes (field names, types, validations, @Column names)
+- All @Service classes (every business rule and decision branch)
+- All @Repository classes (what queries are executed, what entities are persisted)
+- pom.xml or build.gradle.kts (build tool, Java version, Spring Boot version)
+- application.properties / application.yml (server port, datasource config, Hydra URLs)
+- Any existing security configuration classes
+- Any existing test classes (understand what is already covered)
+
+Do NOT skip this step. The quality of everything that follows depends on it.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2 — ADD DEPENDENCIES
+────────────────────────────────────────────────────────────────────────────────
+
+IF Maven (pom.xml), add to <dependencies>:
+
+  <!-- Karate test framework -->
+  <dependency>
+      <groupId>io.karatelabs</groupId>
+      <artifactId>karate-junit5</artifactId>
+      <version>1.5.1</version>
+      <scope>test</scope>
+  </dependency>
+
+  <!-- H2 in Oracle compatibility mode for component tests (no real Oracle needed) -->
+  <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+  </dependency>
+
+  Add inside <build><testResources>:
+    <testResource>
+        <directory>src/test/resources</directory>
+    </testResource>
+    <testResource>
+        <directory>src/test/java</directory>
+        <includes>
+            <include>**/*.feature</include>
+            <include>**/karate-config.js</include>
+        </includes>
+    </testResource>
+
+  Add maven-failsafe-plugin inside <build><plugins>:
+    <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+            <includes>
+                <include>**/KarateSmokeTestRunner.java</include>
+            </includes>
+            <systemPropertyVariables>
+                <service.base-url>${service.base-url}</service.base-url>
+                <auth.token>${auth.token}</auth.token>
+                <auth.enabled>${auth.enabled}</auth.enabled>
+                <hydra.token.url>${hydra.token.url}</hydra.token.url>
+                <hydra.client.id>${hydra.client.id}</hydra.client.id>
+                <hydra.client.secret>${hydra.client.secret}</hydra.client.secret>
+                <hydra.scope>${hydra.scope}</hydra.scope>
+                <karate.env>${karate.env}</karate.env>
+                <karate.options>${karate.options}</karate.options>
+            </systemPropertyVariables>
+        </configuration>
+        <executions>
+            <execution>
+                <goals>
+                    <goal>integration-test</goal>
+                    <goal>verify</goal>
+                </goals>
+            </execution>
+        </executions>
+    </plugin>
+
+  Add Maven profiles:
+    unit       → skip.unit.tests=false, skip.karate.tests=true
+    component  → skip.unit.tests=false, skip.karate.tests=true
+    smoke      → skip.unit.tests=true,  skip.karate.tests=false, karate.options=--tags @smoke
+    prod-smoke → skip.unit.tests=true,  skip.karate.tests=false, karate.runner=KarateProdSmokeRunner
+    all        → skip.unit.tests=false, skip.karate.tests=false
+
+──────────────────────────────────────────────────────────
+
+IF Gradle Kotlin DSL (build.gradle.kts), add to dependencies:
+  testImplementation("io.karatelabs:karate-junit5:1.5.1")
+  testImplementation("com.h2database:h2")  // version managed by Spring Boot BOM
+
+  Add sourceSets and tasks as per Version 1 prompt, plus these extra
+  systemProperty entries in karateSmoke and karateProdSmoke tasks:
+    systemProperty("auth.enabled",        findProperty("auth.enabled")?.toString()        ?: "false")
+    systemProperty("hydra.token.url",     findProperty("hydra.token.url")?.toString()     ?: "")
+    systemProperty("hydra.client.id",     findProperty("hydra.client.id")?.toString()     ?: "")
+    systemProperty("hydra.client.secret", findProperty("hydra.client.secret")?.toString() ?: "")
+    systemProperty("hydra.scope",         findProperty("hydra.scope")?.toString()         ?: "")
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3 — CREATE DIRECTORY STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+
+  src/test/
+  ├── java/
+  │   └── karate/
+  │       ├── runner/
+  │       │   ├── KarateSmokeTestRunner.java
+  │       │   └── KarateProdSmokeRunner.java
+  │       └── features/
+  │           ├── prod-smoke/
+  │           │   ├── health-readiness.feature    (@prod-safe @health)
+  │           │   ├── auth-validation.feature     (@prod-safe @auth)
+  │           │   └── performance-sla.feature     (@prod-safe @performance)
+  │           ├── smoke/
+  │           │   └── [one .feature per @RestController]
+  │           ├── business/
+  │           │   └── [one .feature per business flow]
+  │           └── helpers/
+  │               ├── get-token.feature           (fetch Hydra Bearer token)
+  │               └── [other reusable helpers]
+  └── resources/
+      ├── karate-config.js
+      ├── application-test.properties             (H2 Oracle-mode, auth disabled)
+      ├── payloads/
+      │   └── [one JSON request body per endpoint]
+      ├── schemas/
+      │   └── [one JSON schema per response type]
+      └── testdata/
+          └── [data-driven JSON profiles per entity]
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4 — CREATE application-test.properties (Oracle → H2 bypass for component tests)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/resources/application-test.properties:
+
+  # Replace Oracle with H2 in Oracle compatibility mode for component tests.
+  # Karate smoke tests still hit the real Oracle in QA/SIT via the deployed app.
+  spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=Oracle;NON_KEYWORDS=VALUE
+  spring.datasource.driver-class-name=org.h2.Driver
+  spring.datasource.username=sa
+  spring.datasource.password=
+  spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+  spring.jpa.hibernate.ddl-auto=create-drop
+  spring.sql.init.mode=always
+
+  # Disable Ory Hydra auth enforcement for component tests
+  security.auth.enabled=false
+
+  # Disable Liquibase/Flyway if present (H2 uses ddl-auto instead)
+  spring.liquibase.enabled=false
+  spring.flyway.enabled=false
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 5 — IMPLEMENT @EnableAuth BYPASS MECHANISM
+────────────────────────────────────────────────────────────────────────────────
+This is the most important step. Do NOT modify any existing @EnableAuth annotation
+or any existing controller. Add a NEW configuration class that makes @EnableAuth
+a no-op when security.auth.enabled=false.
+
+Look at how @EnableAuth is currently implemented in the project. It is likely one of:
+  a. A Spring HandlerInterceptor registered in a WebMvcConfigurer
+  b. A Spring Security filter or OncePerRequestFilter
+  c. A method-level AOP @Aspect
+
+For each case, add the following bypass:
+
+CASE A — HandlerInterceptor approach:
+  Wrap the existing interceptor registration in @ConditionalOnProperty:
+
+  @Configuration
+  @ConditionalOnProperty(name = "security.auth.enabled", havingValue = "true", matchIfMissing = true)
+  public class AuthInterceptorConfiguration implements WebMvcConfigurer {
+      private final OryHydraTokenValidator tokenValidator;
+      public AuthInterceptorConfiguration(OryHydraTokenValidator tokenValidator) {
+          this.tokenValidator = tokenValidator;
+      }
+      @Override
+      public void addInterceptors(InterceptorRegistry registry) {
+          registry.addInterceptor(new EnableAuthInterceptor(tokenValidator));
+      }
+  }
+
+CASE B — OncePerRequestFilter approach:
+  @Bean
+  @ConditionalOnProperty(name = "security.auth.enabled", havingValue = "true", matchIfMissing = true)
+  public OncePerRequestFilter enableAuthFilter() {
+      return new OryHydraAuthFilter(hydraIntrospectionUrl);
+  }
+
+CASE C — AOP Aspect approach:
+  @Aspect
+  @Component
+  @ConditionalOnProperty(name = "security.auth.enabled", havingValue = "true", matchIfMissing = true)
+  public class EnableAuthAspect {
+      // existing aspect logic here
+  }
+
+The key principle: when security.auth.enabled=false, the bean is simply not created.
+Spring Boot skips it entirely. No if/else inside existing code needed.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 6 — WRITE karate-config.js (with Hydra token fetch + auth bypass)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/resources/karate-config.js:
+
+  function fn() {
+    var env             = karate.env || 'qa';
+    var baseUrl         = karate.properties['service.base-url']
+                          || java.lang.System.getenv('SERVICE_BASE_URL')
+                          || 'http://localhost:8080';
+
+    // Auth mode: set AUTH_ENABLED=false when app started with security.auth.enabled=false
+    var authEnabled     = (karate.properties['auth.enabled'] || java.lang.System.getenv('AUTH_ENABLED') || 'true') !== 'false';
+
+    var hydraTokenUrl   = karate.properties['hydra.token.url']     || java.lang.System.getenv('HYDRA_TOKEN_URL')     || '';
+    var hydraClientId   = karate.properties['hydra.client.id']     || java.lang.System.getenv('HYDRA_CLIENT_ID')     || '';
+    var hydraSecret     = karate.properties['hydra.client.secret'] || java.lang.System.getenv('HYDRA_CLIENT_SECRET') || '';
+    var hydraScope      = karate.properties['hydra.scope']         || java.lang.System.getenv('HYDRA_SCOPE')         || 'openid';
+
+    karate.configure('connectTimeout', 5000);
+    karate.configure('readTimeout',    15000);
+    karate.configure('retry', { count: 10, interval: 250 });
+    karate.configure('logPrettyRequest',  true);
+    karate.configure('logPrettyResponse', true);
+
+    var bearerToken = 'test-token-auth-disabled';
+
+    if (authEnabled && hydraTokenUrl !== '') {
+      // Fetch real Bearer token from Ory Hydra — called ONCE per JVM session, result cached
+      var session = karate.callSingle(
+        'classpath:karate/features/helpers/get-token.feature',
+        {
+          hydraTokenUrl:   hydraTokenUrl,
+          hydraClientId:   hydraClientId,
+          hydraSecret:     hydraSecret,
+          hydraScope:      hydraScope
+        }
+      );
+      bearerToken = session.token;
+      karate.log('Hydra token fetched successfully for env: ' + env);
+    } else {
+      karate.log('Auth disabled or no Hydra URL configured — using placeholder token');
+    }
+
+    // Inject Authorization + x-request-id on EVERY HTTP request automatically
+    karate.configure('headers', function() {
+      return {
+        'x-request-id':  'auto-' + java.util.UUID.randomUUID(),
+        'Authorization': 'Bearer ' + bearerToken
+      };
+    });
+
+    return {
+      env:          env,
+      baseUrl:      baseUrl,
+      authEnabled:  authEnabled,
+      bearerToken:  bearerToken,
+      defaultHeaders: {
+        'Content-Type':     'application/json',
+        'x-correlation-id': 'test-' + java.util.UUID.randomUUID()
+      }
+    };
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 7 — WRITE get-token.feature (Ory Hydra token fetch helper)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/java/karate/features/helpers/get-token.feature:
+
+  Feature: Fetch Bearer token from Ory Hydra using client_credentials grant
+
+    Scenario:
+      Given url hydraTokenUrl
+      And header Content-Type = 'application/x-www-form-urlencoded'
+      And header Authorization = karate.toBase64(hydraClientId + ':' + hydraSecret)
+      And request 'grant_type=client_credentials&scope=' + hydraScope
+      When method post
+      Then status 200
+      And match response.access_token == '#notnull'
+      * def token = response.access_token
+
+  NOTE: If your Hydra server uses form-body credentials instead of Basic auth, change to:
+    And request 'grant_type=client_credentials&client_id=' + hydraClientId
+                + '&client_secret=' + hydraSecret + '&scope=' + hydraScope
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 8 — WRITE KARATE RUNNERS
+────────────────────────────────────────────────────────────────────────────────
+
+KarateSmokeTestRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateSmokeTestRunner {
+      @Karate.Test
+      Karate runSmokeFeatures() {
+          return Karate.run("classpath:karate/features")
+                  .tags("~@ignore")
+                  .relativeTo(getClass());
+      }
+  }
+
+KarateProdSmokeRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateProdSmokeRunner {
+      @Karate.Test
+      Karate runProdSafeFeatures() {
+          return Karate.run("classpath:karate/features/prod-smoke")
+                  .tags("@prod-safe")
+                  .relativeTo(getClass());
+      }
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 9 — WRITE FEATURE FILES
+────────────────────────────────────────────────────────────────────────────────
+For EACH @RestController found in Step 1, generate a .feature file.
+
+MANDATORY scenarios for EVERY endpoint:
+  1. Happy path — valid request with Bearer token → assert status + response body
+  2. Missing Authorization header → assert 401  (only if @EnableAuth present on that method)
+  3. Invalid/expired Bearer token → assert 401  (only if @EnableAuth present on that method)
+  4. Missing mandatory request header → assert 400
+  5. Invalid request body (missing required field) → assert 400
+  6. Response schema validation using karate match (#string #number #boolean #notnull)
+  7. Response time SLA: assert responseTime < 2000
+
+For POST/PUT endpoints also add:
+  8. Idempotency — same Idempotency-Key twice returns same response
+  9. Boundary values — min and max field values
+
+For business logic endpoints:
+  10. One scenario per decision outcome (APPROVED/REJECTED/PENDING etc.)
+  11. Data-driven using Examples: table or karate.read() from testdata/ JSON files
+
+TAGGING RULES:
+  Every feature:                @smoke
+  Read-only GETs (health):      @smoke @prod-safe @health
+  Auth validation (no writes):  @smoke @prod-safe @auth
+  Performance checks:           @smoke @prod-safe @performance
+  Write operations POST/PUT/DEL: @smoke @qa @sit  (NEVER @prod-safe)
+  Business flows:               @smoke @qa @sit @business
+
+EVERY scenario must:
+  - Use: * def correlationId = 'test-' + java.util.UUID.randomUUID()
+  - Use headers defaultHeaders from karate-config.js (Authorization already injected globally)
+  - Never hardcode URL — always use baseUrl
+  - Assert HTTP status code AND at least 3 response body fields
+  - Use #notnull for dynamic fields (IDs, timestamps, generated values)
+  - Never use Thread.sleep — use karate retry or polling helper
+
+EXAMPLE well-formed scenario with auth:
+  @smoke @qa @sit
+  Scenario: Prime borrower loan approved (auth enabled)
+    * def correlationId = 'test-' + java.util.UUID.randomUUID()
+    Given url baseUrl + '/api/loans'
+    And headers defaultHeaders
+    And header x-correlation-id = correlationId
+    # Authorization: Bearer <token> is injected globally by karate-config.js
+    And request read('classpath:payloads/loan-request.json')
+    When method post
+    Then status 202
+    And match response.loanId        == '#notnull'
+    And match response.status        == 'APPROVED'
+    And match response.correlationId == correlationId
+    And assert responseTime < 2000
+
+EXAMPLE 401 scenario for @EnableAuth protected endpoint:
+  @smoke @qa @sit
+  Scenario: Request without Bearer token is rejected with 401
+    * def correlationId = 'test-' + java.util.UUID.randomUUID()
+    Given url baseUrl + '/api/loans'
+    And header Content-Type = 'application/json'
+    And header x-correlation-id = correlationId
+    # Explicitly override the global Authorization header with nothing
+    And header Authorization = ''
+    And request read('classpath:payloads/loan-request.json')
+    When method post
+    Then status 401
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 10 — WRITE PROD-SMOKE FEATURES (safe for production)
+────────────────────────────────────────────────────────────────────────────────
+
+health-readiness.feature (@prod-safe — no auth needed, these are unprotected):
+  Scenario: Actuator health is UP → GET /actuator/health → status 200, response.status == 'UP'
+  Scenario: Liveness probe → GET /actuator/health/liveness → status 200
+  Scenario: Readiness probe → GET /actuator/health/readiness → status 200
+
+auth-validation.feature (@prod-safe — validates Hydra integration is working):
+  Scenario: Request without token to @EnableAuth endpoint returns 401
+    (use a GET endpoint with @EnableAuth — no data creation)
+  Scenario: Request with valid Hydra token returns 200
+    (proves Hydra is reachable and token validation works end-to-end)
+
+performance-sla.feature (@prod-safe — health endpoint only):
+  Scenario: Health endpoint responds within 1000ms → assert responseTime < 1000
+  Scenario: Any GET @EnableAuth endpoint with valid token responds within 2000ms
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 11 — WRITE TEST DATA AND PAYLOAD FILES
+────────────────────────────────────────────────────────────────────────────────
+
+For each entity type found in Step 1:
+  src/test/resources/testdata/[entity-plural].json
+  Structure: { "profiles": { "happy": {...}, "rejection": {...}, "boundary": {...} },
+               "bulkSubmissions": [{...}, {...}, {...}] }
+
+For each endpoint:
+  src/test/resources/payloads/[endpoint-name].json  (minimal valid request body)
+
+For each response type:
+  src/test/resources/schemas/[response-name]-schema.json
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 12 — VERIFY EVERYTHING WORKS IN BOTH MODES
+────────────────────────────────────────────────────────────────────────────────
+
+MODE A — LOCAL / CI (no Hydra, no Oracle, auth bypassed):
+
+  1. Compile:
+       mvn compile test-compile   OR   ./gradlew testClasses
+
+  2. Run component tests (uses H2, auth disabled via application-test.properties):
+       mvn test -Pcomponent   OR   ./gradlew test
+
+  3. Start app with auth disabled:
+       mvn spring-boot:run -Dspring-boot.run.arguments="--security.auth.enabled=false --spring.profiles.active=test"
+       OR
+       ./gradlew bootRun --args="--security.auth.enabled=false --spring.profiles.active=test"
+
+  4. Run Karate smoke tests (no Hydra token needed):
+       mvn verify -Psmoke -Dservice.base-url=http://localhost:8080 -Dauth.enabled=false
+       OR
+       ./gradlew karateSmoke -Pservice.base-url=http://localhost:8080 -Pauth.enabled=false
+
+MODE B — QA / SIT (real Oracle, real Ory Hydra):
+
+  5. App is already deployed in QA/SIT pointing to real Oracle and Hydra.
+
+  6. Run Karate smoke tests with real Hydra token:
+       mvn verify -Psmoke \
+         -Dservice.base-url=https://your-service.qa.internal \
+         -Dauth.enabled=true \
+         -Dhydra.token.url=https://hydra.qa.internal/oauth2/token \
+         -Dhydra.client.id=test-client \
+         -Dhydra.client.secret=secret \
+         -Dhydra.scope=openid
+
+       OR ./gradlew karateSmoke with equivalent -P flags
+
+  7. Run prod-safe tests against production:
+       mvn verify -Pprod-smoke \
+         -Dservice.base-url=https://your-service.prod.internal \
+         -Dauth.enabled=true \
+         -Dhydra.token.url=https://hydra.prod.internal/oauth2/token \
+         -Dhydra.client.id=prod-client \
+         -Dhydra.client.secret=prod-secret \
+         -Dhydra.scope=openid
+
+  Fix any failures before reporting success.
+
+  Final report must include:
+    - Total scenarios created
+    - Which endpoints have @EnableAuth (auth tested in 401 scenarios)
+    - Which endpoints are unprotected (no 401 test needed)
+    - Endpoints skipped and why
+    - Command for QA team to run smoke tests
+    - Command for production team to run prod-safe tests
+
+────────────────────────────────────────────────────────────────────────────────
+HARD CONSTRAINTS — never violate these
+────────────────────────────────────────────────────────────────────────────────
+  - Do NOT add Docker, Testcontainers, WireMock, embedded Kafka, or LocalStack
+  - Do NOT modify any existing @RestController, @Service, or @EnableAuth annotation
+  - Do NOT modify any existing test classes — only ADD new ones
+  - Do NOT hardcode URLs, credentials, or tokens anywhere in feature files
+  - Do NOT tag any POST/PUT/DELETE operation as @prod-safe
+  - Do NOT use Thread.sleep in any feature file
+  - Oracle driver (ojdbc) is already in the project — do NOT add it again
+  - Only new dependencies allowed:
+      io.karatelabs:karate-junit5:1.5.1
+      com.h2database:h2 (test scope only)
+
+================================================================================
+  HOW AUTH BYPASS SUMMARY (paste this to your team)
+================================================================================
+
+  Mode                | App startup flag              | Karate flag       | Token source
+  --------------------|-------------------------------|-------------------|-------------------
+  Local/CI (no Hydra) | --security.auth.enabled=false | -Dauth.enabled=false | placeholder string
+  QA/SIT (real Hydra) | --security.auth.enabled=true  | -Dauth.enabled=true  | fetched from Hydra
+  Production          | --security.auth.enabled=true  | -Dauth.enabled=true  | fetched from Hydra
+
+================================================================================
+  END OF PROMPT
+================================================================================
