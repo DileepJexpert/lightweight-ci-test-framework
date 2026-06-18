@@ -1,0 +1,428 @@
+================================================================================
+  KARATE FRAMEWORK SETUP PROMPT
+  Paste this entire prompt into your IntelliJ AI terminal (company hosted model)
+  on any existing Spring Boot project to generate a complete Karate test framework.
+================================================================================
+
+You are a senior test automation engineer. Your task is to set up a complete,
+production-ready Karate test framework for this existing Spring Boot project.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1 — ANALYSE THE PROJECT FIRST
+────────────────────────────────────────────────────────────────────────────────
+Before writing anything, read and understand:
+- All @RestController classes (note every endpoint: HTTP method, path, request
+  body fields, required headers, all possible response codes and bodies)
+- All domain/model/DTO/record classes (field names, types, validations)
+- All @Service classes (note every business rule: what inputs lead to what outcomes,
+  every if/else branch that changes the result)
+- pom.xml or build.gradle.kts (detect build tool, Java version, Spring Boot version)
+- application.properties or application.yml (note server.port, server.servlet.context-path)
+- Any existing test classes (understand what is already covered so you don't duplicate)
+
+Do NOT skip this step. The quality of the generated tests depends entirely on
+how well you understand the project before writing.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2 — ADD KARATE DEPENDENCY
+────────────────────────────────────────────────────────────────────────────────
+
+IF the project uses Maven (pom.xml):
+
+  2a. Add inside <dependencies>:
+
+      <dependency>
+          <groupId>io.karatelabs</groupId>
+          <artifactId>karate-junit5</artifactId>
+          <version>1.5.1</version>
+          <scope>test</scope>
+      </dependency>
+
+  2b. Add inside <build><testResources> (so .feature files reach the classpath):
+
+      <testResource>
+          <directory>src/test/resources</directory>
+      </testResource>
+      <testResource>
+          <directory>src/test/java</directory>
+          <includes>
+              <include>**/*.feature</include>
+              <include>**/karate-config.js</include>
+          </includes>
+      </testResource>
+
+  2c. Add maven-failsafe-plugin inside <build><plugins>:
+
+      <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>3.5.2</version>
+          <configuration>
+              <includes>
+                  <include>**/KarateSmokeTestRunner.java</include>
+              </includes>
+              <systemPropertyVariables>
+                  <service.base-url>${service.base-url}</service.base-url>
+                  <auth.token>${auth.token}</auth.token>
+                  <karate.env>${karate.env}</karate.env>
+                  <karate.options>${karate.options}</karate.options>
+              </systemPropertyVariables>
+          </configuration>
+          <executions>
+              <execution>
+                  <goals>
+                      <goal>integration-test</goal>
+                      <goal>verify</goal>
+                  </goals>
+              </execution>
+          </executions>
+      </plugin>
+
+  2d. Add these Maven profiles inside <profiles>:
+
+      <profile>
+          <id>unit</id>
+          <properties>
+              <skip.unit.tests>false</skip.unit.tests>
+              <skip.karate.tests>true</skip.karate.tests>
+          </properties>
+      </profile>
+      <profile>
+          <id>component</id>
+          <properties>
+              <skip.unit.tests>false</skip.unit.tests>
+              <skip.karate.tests>true</skip.karate.tests>
+          </properties>
+      </profile>
+      <profile>
+          <id>smoke</id>
+          <properties>
+              <skip.unit.tests>true</skip.unit.tests>
+              <skip.karate.tests>false</skip.karate.tests>
+              <karate.options>--tags @smoke</karate.options>
+          </properties>
+      </profile>
+      <profile>
+          <id>prod-smoke</id>
+          <properties>
+              <skip.unit.tests>true</skip.unit.tests>
+              <skip.karate.tests>false</skip.karate.tests>
+              <karate.runner>KarateProdSmokeRunner</karate.runner>
+          </properties>
+      </profile>
+      <profile>
+          <id>all</id>
+          <properties>
+              <skip.unit.tests>false</skip.unit.tests>
+              <skip.karate.tests>false</skip.karate.tests>
+          </properties>
+      </profile>
+
+──────────────────────────────────────────────────────────
+
+IF the project uses Gradle Kotlin DSL (build.gradle.kts):
+
+  2a. Add to dependencies block:
+      testImplementation("io.karatelabs:karate-junit5:1.5.1")
+
+  2b. Add after dependencies block:
+
+      sourceSets {
+          test {
+              resources {
+                  srcDirs("src/test/resources", "src/test/java")
+                  include("**/*.feature", "**/karate-config.js", "**/*.json")
+              }
+          }
+      }
+      tasks.named<Copy>("processTestResources") {
+          duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+      }
+
+  2c. Add Karate tasks after sourceSets block:
+
+      val karateSmoke by tasks.registering(Test::class) {
+          useJUnitPlatform()
+          description = "Run Karate smoke tests against a deployed service."
+          group       = "verification"
+          include("**/KarateSmokeTestRunner.class")
+          systemProperty("service.base-url", findProperty("service.base-url")?.toString() ?: "http://localhost:8080")
+          systemProperty("auth.token",       findProperty("auth.token")?.toString()        ?: "local-token")
+          systemProperty("karate.env",       findProperty("karate.env")?.toString()        ?: "qa")
+          systemProperty("karate.options",   findProperty("karate.options")?.toString()    ?: "--tags @smoke")
+          shouldRunAfter(tasks.named("test"))
+      }
+
+      val karateProdSmoke by tasks.registering(Test::class) {
+          useJUnitPlatform()
+          description = "Run @prod-safe Karate tests only — safe against live production."
+          group       = "verification"
+          include("**/KarateProdSmokeRunner.class")
+          systemProperty("service.base-url", findProperty("service.base-url")?.toString() ?: "http://localhost:8080")
+          systemProperty("auth.token",       findProperty("auth.token")?.toString()        ?: "local-token")
+          systemProperty("karate.env",       findProperty("karate.env")?.toString()        ?: "production")
+          shouldRunAfter(tasks.named("test"))
+      }
+
+      val allTests by tasks.registering {
+          description = "Run all tests — component + Karate smoke."
+          group       = "verification"
+          dependsOn(tasks.named("test"), karateSmoke)
+      }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3 — CREATE DIRECTORY STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+Create exactly this layout:
+
+  src/test/
+  ├── java/
+  │   └── karate/
+  │       ├── runner/
+  │       │   ├── KarateSmokeTestRunner.java
+  │       │   └── KarateProdSmokeRunner.java
+  │       └── features/
+  │           ├── prod-smoke/
+  │           │   ├── health-readiness.feature
+  │           │   ├── auth-validation.feature
+  │           │   └── performance-sla.feature
+  │           ├── smoke/
+  │           │   └── [one .feature file per @RestController]
+  │           ├── business/
+  │           │   └── [one .feature file per business flow / service]
+  │           └── helpers/
+  │               └── [reusable karate.call() helper .feature files]
+  └── resources/
+      ├── karate-config.js
+      ├── payloads/
+      │   └── [one JSON request template per endpoint]
+      ├── schemas/
+      │   └── [one JSON schema per response type]
+      └── testdata/
+          └── [data-driven JSON profiles per entity]
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4 — WRITE karate-config.js
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/resources/karate-config.js with this exact logic:
+
+  function fn() {
+    var env       = karate.env || 'qa';
+    var baseUrl   = karate.properties['service.base-url']
+                    || java.lang.System.getenv('SERVICE_BASE_URL')
+                    || 'http://localhost:8080';
+    var authToken = karate.properties['auth.token']
+                    || java.lang.System.getenv('AUTH_TOKEN')
+                    || 'local-token';
+
+    karate.configure('connectTimeout', 5000);
+    karate.configure('readTimeout',    15000);
+    karate.configure('retry', { count: 10, interval: 250 });
+    karate.configure('logPrettyRequest',  true);
+    karate.configure('logPrettyResponse', true);
+
+    karate.configure('headers', function() {
+      return { 'x-request-id': 'auto-' + java.util.UUID.randomUUID() };
+    });
+
+    return {
+      env:       env,
+      baseUrl:   baseUrl,
+      authToken: authToken,
+      defaultHeaders: {
+        'Content-Type':     'application/json',
+        'x-correlation-id': 'test-' + java.util.UUID.randomUUID()
+      }
+    };
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 5 — WRITE KARATE RUNNERS
+────────────────────────────────────────────────────────────────────────────────
+
+KarateSmokeTestRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateSmokeTestRunner {
+      @Karate.Test
+      Karate runSmokeFeatures() {
+          return Karate.run("classpath:karate/features")
+                  .tags("~@ignore")
+                  .relativeTo(getClass());
+      }
+  }
+
+KarateProdSmokeRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateProdSmokeRunner {
+      @Karate.Test
+      Karate runProdSafeFeatures() {
+          return Karate.run("classpath:karate/features/prod-smoke")
+                  .tags("@prod-safe")
+                  .relativeTo(getClass());
+      }
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 6 — WRITE FEATURE FILES
+────────────────────────────────────────────────────────────────────────────────
+For EACH @RestController found in Step 1, generate a .feature file.
+
+  MANDATORY scenarios for EVERY endpoint:
+    1. Happy path — valid request → assert correct status code + response body fields
+    2. Missing mandatory header (e.g. x-correlation-id) → assert 400 or 401
+    3. Invalid/empty request body → assert 400
+    4. Response schema validation using karate match with #string #number #boolean #array
+    5. Response time assertion: responseTime < 2000
+
+  For POST/PUT endpoints also add:
+    6. Idempotency — same Idempotency-Key twice returns same response, not duplicate record
+    7. Boundary values — test min and max allowed field values
+
+  For endpoints backed by business logic (detected from @Service in Step 1):
+    8. One scenario per decision outcome (e.g. APPROVED / REJECTED / PENDING_RETRY)
+    9. Data-driven using Examples: table OR external JSON via:
+         * def profiles = karate.read('classpath:testdata/[entity].json')
+
+  TAGGING RULES — apply these tags precisely:
+    Every feature file:            @smoke
+    Read-only GET health checks:   @smoke @prod-safe @health
+    Auth validation (no writes):   @smoke @prod-safe @auth
+    Performance/SLA checks:        @smoke @prod-safe @performance
+    Write operations POST/PUT/DEL: @smoke @qa @sit   (NEVER @prod-safe)
+    Business flow scenarios:       @smoke @qa @sit @business
+
+  EVERY scenario must follow these rules:
+    - Use: * def correlationId = 'test-' + java.util.UUID.randomUUID()
+    - Set headers using defaultHeaders from karate-config.js
+    - Never hardcode a URL — always compose from baseUrl variable
+    - Assert both the HTTP status code AND at least 3 response body fields
+    - Use #notnull for fields that must exist but value is dynamic (e.g. IDs, timestamps)
+    - Use #regex for fields with known patterns (e.g. UUID, date formats)
+    - Never use Thread.sleep — use karate retry or karate.call() polling helper instead
+
+  EXAMPLE well-formed scenario:
+    Scenario: Prime borrower loan application is approved
+      * def correlationId = 'test-' + java.util.UUID.randomUUID()
+      Given url baseUrl + '/api/loans'
+      And headers defaultHeaders
+      And header x-correlation-id = correlationId
+      And request read('classpath:payloads/loan-request.json')
+      When method post
+      Then status 202
+      And match response.loanId        == '#notnull'
+      And match response.status        == 'APPROVED'
+      And match response.correlationId == correlationId
+      And assert responseTime < 2000
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 7 — WRITE PROD-SMOKE FEATURES
+────────────────────────────────────────────────────────────────────────────────
+These three files are SAFE to run against live production.
+They must NEVER create, modify, or delete data.
+
+health-readiness.feature:
+  @prod-safe @smoke @health
+  Feature: Health and readiness checks
+    Scenario: Actuator health endpoint is UP
+      Given url baseUrl + '/actuator/health'
+      When method get
+      Then status 200
+      And match response.status == 'UP'
+
+    Scenario: Liveness probe responds
+      Given url baseUrl + '/actuator/health/liveness'
+      When method get
+      Then status 200
+
+    Scenario: Readiness probe responds
+      Given url baseUrl + '/actuator/health/readiness'
+      When method get
+      Then status 200
+
+auth-validation.feature:
+  @prod-safe @smoke @auth
+  Feature: Auth header validation
+    Scenario: Request without Bearer token returns 401
+      Given url baseUrl + '/[any protected endpoint from Step 1]'
+      When method get
+      Then status 401
+
+    Scenario: Request with valid token returns 200
+      Given url baseUrl + '/[any protected endpoint]'
+      And header Authorization = 'Bearer ' + authToken
+      When method get
+      Then status 200
+
+performance-sla.feature:
+  @prod-safe @smoke @performance
+  Feature: Response time SLA
+    Scenario: Health endpoint responds within SLA
+      Given url baseUrl + '/actuator/health'
+      When method get
+      Then status 200
+      And assert responseTime < 1000
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 8 — WRITE TEST DATA AND PAYLOAD FILES
+────────────────────────────────────────────────────────────────────────────────
+
+For each entity/domain type found in Step 1, create:
+  src/test/resources/testdata/[entity-plural].json
+  Structure: { "profiles": { "happy": {...}, "rejection": {...}, "boundary": {...} },
+               "bulkSubmissions": [{...}, {...}, {...}] }
+
+For each endpoint, create:
+  src/test/resources/payloads/[endpoint-name].json
+  Content: a valid minimal request body for that endpoint
+
+For each response type, create:
+  src/test/resources/schemas/[response-name]-schema.json
+  Content: karate-compatible JSON schema with #string, #number, #boolean, #notnull types
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 9 — VERIFY EVERYTHING WORKS
+────────────────────────────────────────────────────────────────────────────────
+After creating all files, do the following in order:
+
+  1. Compile:
+       mvn compile test-compile          (Maven)
+       ./gradlew testClasses             (Gradle)
+     Fix any compilation errors before continuing.
+
+  2. Run existing tests to confirm nothing is broken:
+       mvn test -Pcomponent              (Maven)
+       ./gradlew test                    (Gradle)
+
+  3. Start the application:
+       mvn spring-boot:run               (Maven)
+       ./gradlew bootRun                 (Gradle)
+
+  4. Run Karate smoke tests:
+       mvn verify -Psmoke -Dservice.base-url=http://localhost:8080        (Maven)
+       ./gradlew karateSmoke -Pservice.base-url=http://localhost:8080     (Gradle)
+
+  5. Fix any Karate failures — do not report success until all scenarios pass.
+
+  6. Final report must include:
+       - Total scenarios created
+       - Endpoints covered (list each one)
+       - Endpoints skipped and why
+       - Command to run smoke tests in QA/SIT environment
+       - Command to run prod-safe tests in production
+
+────────────────────────────────────────────────────────────────────────────────
+HARD CONSTRAINTS — never violate these
+────────────────────────────────────────────────────────────────────────────────
+  - Do NOT add Docker, Testcontainers, WireMock, embedded Kafka, or LocalStack
+  - Do NOT modify any existing src/main/ production code
+  - Do NOT modify any existing test classes — only ADD new ones
+  - Do NOT hardcode environment URLs or credentials anywhere
+  - Do NOT tag any write operation (POST/PUT/DELETE) as @prod-safe
+  - Do NOT use Thread.sleep in any feature file
+  - Only ONE new dependency allowed: io.karatelabs:karate-junit5:1.5.1
+
+================================================================================
+  END OF PROMPT
+================================================================================
