@@ -13,6 +13,7 @@ import com.example.lightweight.service.PaymentProcessingService;
 import com.example.lightweight.validation.EventValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,7 +34,11 @@ public class LocalDemoConfiguration {
         return new EventDecisionService();
     }
 
+    // In-memory stub used when no downstream KYC service is configured (local demo).
+    // When kyc.service.base-url is set, ServiceClientConfiguration supplies the real
+    // RestClient-based client instead, so these two beans never collide.
     @Bean
+    @ConditionalOnProperty(name = "kyc.service.base-url", havingValue = "false", matchIfMissing = true)
     ThirdPartyKycClient thirdPartyKycClient() {
         return request -> new KycResponse(KycStatus.VERIFIED, null);
     }
