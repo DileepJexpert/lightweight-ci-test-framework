@@ -1,0 +1,545 @@
+================================================================================
+  KARATE FRAMEWORK SETUP PROMPT — VERSION 3
+  Targets: Spring Boot + Oracle + Ory Hydra + @EnableOAuth (internal library)
+  Key feature: in-process FAKE OAuth server bypass — no library modification needed
+  Paste this entire prompt into your IntelliJ AI terminal (company hosted model)
+  on any existing Spring Boot project to generate a complete Karate test framework.
+================================================================================
+
+You are a senior test automation engineer. Your task is to set up a complete,
+production-ready Karate test framework for this existing Spring Boot project.
+
+The project has these REAL production characteristics you MUST handle correctly:
+  A. Oracle database connectivity (ojdbc already on classpath)
+  B. Ory Hydra OAuth2 server (introspection) + Hydra Decryption Service + STS server + EA server
+  C. Internal library that processes @EnableOAuth annotation on controller methods —
+     YOU CANNOT MODIFY THIS LIBRARY. It is read-only.
+  D. Controller methods use:
+       @EnableOAuth(skipHydraTokenDecryption = true|false,
+                    skipClientIdValidation   = true|false,
+                    allowedScope             = "dev-portal-suite")
+  E. application.yml has block:
+       oauth:
+         hydraServerBaseURL: ${oauth.hydra.server.baseurl}
+         hydraDecryptionServiceBaseURL: ${oauth.hydra.decryption.service.baseurl}
+         stsServerBaseURL: ${oauth.sts.server.baseurl}
+         eaServerBaseURL: ${oauth.easerver.baseurl}
+         allowedClientIds: ""
+
+────────────────────────────────────────────────────────────────────────────────
+  CORE STRATEGY — why this approach works without modifying the library
+────────────────────────────────────────────────────────────────────────────────
+
+  We do NOT bypass @EnableOAuth. We do NOT modify the internal library.
+  Instead we POINT the library at a FAKE OAuth server running in the SAME JVM.
+
+  The internal @EnableOAuth library executes its full validation flow exactly as
+  it does in production — it calls hydraServerBaseURL, possibly the decryption
+  service, possibly STS, possibly EA. But all four URLs point at controllers we
+  add under src/test/java that always return "active=true scope=dev-portal-suite".
+
+  Karate sends ANY non-empty Bearer token. The library calls our fake endpoints.
+  The fake endpoints always say "valid". The request reaches the controller.
+
+  This means:
+    - Production code is untouched
+    - The internal library is untouched
+    - @EnableOAuth annotation behaves exactly as in production
+    - No real Hydra / STS / EA / Decryption services needed in CI
+    - No external mock server (no WireMock, no Docker)
+    - Everything runs in one Spring Boot JVM
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1 — ANALYSE THE PROJECT FIRST
+────────────────────────────────────────────────────────────────────────────────
+Before writing anything, read and understand:
+- All @RestController classes (every endpoint: HTTP method, path, request body,
+  required headers, all response codes — and note every @EnableOAuth annotation
+  with its allowedScope value)
+- All domain/model/DTO/entity/record classes (field names, types, validations)
+- All @Service classes (every business rule, every decision branch)
+- All @Repository classes (queries, entities persisted)
+- pom.xml or build.gradle.kts (build tool, Java version, Spring Boot version)
+- application.yml / application.properties (server.port, oauth.*, datasource)
+- Any existing security configuration classes
+- Any existing test classes (don't duplicate)
+
+For each controller endpoint, document:
+  - HTTP method + path
+  - @EnableOAuth params (skipHydraTokenDecryption, skipClientIdValidation, allowedScope)
+  - Request body shape
+  - Expected response shape and status code
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2 — ADD DEPENDENCIES
+────────────────────────────────────────────────────────────────────────────────
+
+IF Maven (pom.xml), add to <dependencies>:
+
+  <dependency>
+      <groupId>io.karatelabs</groupId>
+      <artifactId>karate-junit5</artifactId>
+      <version>1.5.1</version>
+      <scope>test</scope>
+  </dependency>
+  <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+  </dependency>
+
+  Add inside <build><testResources>:
+    <testResource>
+        <directory>src/test/resources</directory>
+    </testResource>
+    <testResource>
+        <directory>src/test/java</directory>
+        <includes>
+            <include>**/*.feature</include>
+            <include>**/karate-config.js</include>
+        </includes>
+    </testResource>
+
+  Add maven-failsafe-plugin (version 3.5.2) configured to:
+    - Include **/KarateSmokeTestRunner.java
+    - Forward systemPropertyVariables: service.base-url, auth.token, karate.env, karate.options
+    - Bind to integration-test + verify goals
+
+  Add Maven profiles: unit, component, smoke, prod-smoke, all
+  (smoke profile must set karate.options=--tags @smoke)
+  (prod-smoke profile must set karate.runner=KarateProdSmokeRunner)
+
+IF Gradle Kotlin DSL (build.gradle.kts):
+  testImplementation("io.karatelabs:karate-junit5:1.5.1")
+  testImplementation("com.h2database:h2")
+  Add sourceSets test resources srcDirs("src/test/resources", "src/test/java")
+  Add tasks: karateSmoke, karateProdSmoke, allTests with appropriate systemProperty entries
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3 — CREATE DIRECTORY STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+
+  src/test/
+  ├── java/
+  │   ├── com/example/test/
+  │   │   └── FakeOAuthServer.java                 ← in-process fake OAuth endpoints
+  │   └── karate/
+  │       ├── runner/
+  │       │   ├── KarateSmokeTestRunner.java
+  │       │   └── KarateProdSmokeRunner.java
+  │       └── features/
+  │           ├── prod-smoke/
+  │           │   ├── health-readiness.feature     (@prod-safe @health)
+  │           │   ├── auth-validation.feature      (@prod-safe @auth)
+  │           │   └── performance-sla.feature      (@prod-safe @performance)
+  │           ├── smoke/
+  │           │   └── [one .feature per @RestController]
+  │           ├── business/
+  │           │   └── [one .feature per business flow]
+  │           └── helpers/
+  │               └── [reusable karate.call() helpers]
+  └── resources/
+      ├── karate-config.js
+      ├── application-test.properties              ← points OAuth at fake server + H2
+      ├── payloads/
+      │   └── [JSON request body per endpoint]
+      ├── schemas/
+      │   └── [JSON schema per response type]
+      └── testdata/
+          └── [data-driven JSON profiles per entity]
+
+  Adjust the FakeOAuthServer package path to match your project's base package.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4 — CREATE FakeOAuthServer.java (the heart of the bypass)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/java/com/example/test/FakeOAuthServer.java
+(use your project's base package — match the package of your main controllers):
+
+  package com.example.test;   // ADJUST to your project's package
+
+  import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+  import org.springframework.context.annotation.Profile;
+  import org.springframework.web.bind.annotation.*;
+  import java.util.Map;
+
+  /**
+   * In-process fake OAuth server.
+   *
+   * Replaces the real Ory Hydra / STS / Decryption / EA endpoints during Karate tests.
+   * The internal @EnableOAuth library still runs its full validation flow — it just
+   * happens to be calling these endpoints (in the same JVM) instead of real services.
+   *
+   * Active only when:
+   *   - Spring profile 'test' is active
+   *   - Property oauth.fake-server.enabled=true
+   *
+   * Production is unaffected because both conditions must be true to load this bean.
+   */
+  @RestController
+  @Profile("test")
+  @ConditionalOnProperty(name = "oauth.fake-server.enabled", havingValue = "true")
+  public class FakeOAuthServer {
+
+      /** Mocks Ory Hydra's RFC 7662 token introspection endpoint. */
+      @PostMapping({"/fake-oauth/oauth2/introspect", "/fake-oauth/introspect"})
+      public Map<String, Object> introspect(@RequestParam(value = "token", required = false) String token) {
+          return Map.of(
+              "active",    true,
+              "scope",     "dev-portal-suite openid offline",
+              "client_id", "karate-test-client",
+              "username",  "karate-test-user",
+              "sub",       "karate-test-user",
+              "token_type","Bearer",
+              "exp",       System.currentTimeMillis() / 1000 + 3600,
+              "iat",       System.currentTimeMillis() / 1000,
+              "iss",       "http://localhost/fake-oauth"
+          );
+      }
+
+      /** Mocks the STS token endpoint (client_credentials grant). */
+      @PostMapping({"/fake-oauth/oauth2/token", "/fake-oauth/token"})
+      public Map<String, Object> token() {
+          return Map.of(
+              "access_token", "fake-karate-test-token",
+              "token_type",   "Bearer",
+              "expires_in",   3600,
+              "scope",        "dev-portal-suite"
+          );
+      }
+
+      /** Mocks the Hydra Decryption Service — returns the token as-is. */
+      @PostMapping({"/fake-oauth/decrypt", "/fake-oauth/decryption/decrypt"})
+      public Map<String, Object> decrypt(@RequestBody(required = false) Map<String, Object> body) {
+          String token = body != null && body.get("token") != null
+                  ? body.get("token").toString()
+                  : "fake-karate-test-token";
+          return Map.of(
+              "decrypted_token", token,
+              "scope",           "dev-portal-suite",
+              "client_id",       "karate-test-client"
+          );
+      }
+
+      /** Mocks the EA server validation endpoint. */
+      @PostMapping({"/fake-oauth/ea/validate", "/fake-oauth/validate"})
+      public Map<String, Object> eaValidate() {
+          return Map.of(
+              "valid",     true,
+              "scope",     "dev-portal-suite",
+              "client_id", "karate-test-client"
+          );
+      }
+
+      /** Mocks Hydra's well-known JWKS endpoint (in case library fetches public keys). */
+      @GetMapping({"/fake-oauth/.well-known/jwks.json", "/fake-oauth/jwks"})
+      public Map<String, Object> jwks() {
+          return Map.of("keys", java.util.List.of());
+      }
+  }
+
+  IMPORTANT: After examining the internal library, you may discover it calls additional
+  endpoints (e.g. /userinfo, /revoke). Add those endpoints to this controller using the
+  SAME always-valid response pattern. Do NOT modify the library — only add more fake
+  endpoints here as needed.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 5 — CREATE application-test.properties (point OAuth library at fake server)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/resources/application-test.properties:
+
+  # ── Enable the in-process fake OAuth server ──────────────────────────────────
+  oauth.fake-server.enabled=true
+
+  # ── Point ALL OAuth library URLs at the fake server in the same JVM ──────────
+  # Use ${server.port} so this works regardless of which port the app runs on.
+  oauth.hydra.server.baseurl=http://localhost:${server.port}/fake-oauth
+  oauth.hydra.decryption.service.baseurl=http://localhost:${server.port}/fake-oauth
+  oauth.sts.server.baseurl=http://localhost:${server.port}/fake-oauth
+  oauth.easerver.baseurl=http://localhost:${server.port}/fake-oauth
+  oauth.allowed.client.ids=karate-test-client
+
+  # ── Oracle → H2 in Oracle compatibility mode ─────────────────────────────────
+  spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=Oracle;NON_KEYWORDS=VALUE
+  spring.datasource.driver-class-name=org.h2.Driver
+  spring.datasource.username=sa
+  spring.datasource.password=
+  spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+  spring.jpa.hibernate.ddl-auto=create-drop
+  spring.sql.init.mode=always
+  spring.liquibase.enabled=false
+  spring.flyway.enabled=false
+
+  # ── App ──────────────────────────────────────────────────────────────────────
+  app.version=test-1.0.0
+  server.port=8080
+
+  IMPORTANT: If the application.yml uses different property names (e.g. dotted vs.
+  camelCase under the oauth: block), set BOTH variants here. Spring's relaxed binding
+  usually handles this, but be defensive — the library's @Value lookups must resolve.
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 6 — WRITE karate-config.js (sends any Bearer token, fake server accepts it)
+────────────────────────────────────────────────────────────────────────────────
+Create src/test/resources/karate-config.js:
+
+  function fn() {
+    var env     = karate.env || 'test';
+    var baseUrl = karate.properties['service.base-url']
+                  || java.lang.System.getenv('SERVICE_BASE_URL')
+                  || 'http://localhost:8080';
+
+    // In test mode the fake OAuth server accepts ANY non-empty Bearer token.
+    // In QA/SIT/Prod pass a real STS-issued token via -Dauth.token or AUTH_TOKEN.
+    var authToken = karate.properties['auth.token']
+                    || java.lang.System.getenv('AUTH_TOKEN')
+                    || 'karate-test-token';
+
+    karate.configure('connectTimeout', 5000);
+    karate.configure('readTimeout',    15000);
+    karate.configure('retry', { count: 10, interval: 250 });
+    karate.configure('logPrettyRequest',  true);
+    karate.configure('logPrettyResponse', true);
+
+    karate.configure('headers', function() {
+      return {
+        'x-request-id':  'auto-' + java.util.UUID.randomUUID(),
+        'Authorization': 'Bearer ' + authToken
+      };
+    });
+
+    return {
+      env:       env,
+      baseUrl:   baseUrl,
+      authToken: authToken,
+      defaultHeaders: {
+        'Content-Type':     'application/json',
+        'x-correlation-id': 'test-' + java.util.UUID.randomUUID()
+      }
+    };
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 7 — WRITE KARATE RUNNERS
+────────────────────────────────────────────────────────────────────────────────
+
+KarateSmokeTestRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateSmokeTestRunner {
+      @Karate.Test
+      Karate runSmokeFeatures() {
+          return Karate.run("classpath:karate/features")
+                  .tags("~@ignore")
+                  .relativeTo(getClass());
+      }
+  }
+
+KarateProdSmokeRunner.java:
+  package karate.runner;
+  import com.intuit.karate.junit5.Karate;
+  class KarateProdSmokeRunner {
+      @Karate.Test
+      Karate runProdSafeFeatures() {
+          return Karate.run("classpath:karate/features/prod-smoke")
+                  .tags("@prod-safe")
+                  .relativeTo(getClass());
+      }
+  }
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 8 — WRITE FEATURE FILES (one per @RestController)
+────────────────────────────────────────────────────────────────────────────────
+For EACH @RestController found in Step 1, generate a .feature file.
+
+MANDATORY scenarios for EVERY endpoint:
+  1. Happy path — valid request with Bearer token → assert status + response body
+  2. Missing Authorization header → assert 401  (only if @EnableOAuth on that method)
+  3. Missing mandatory request header → assert 400
+  4. Invalid/empty request body → assert 400
+  5. Response schema validation (#string #number #boolean #notnull)
+  6. Response time SLA: assert responseTime < 2000
+
+For POST/PUT endpoints also add:
+  7. Idempotency — same Idempotency-Key twice returns same response
+  8. Boundary values — min and max field values
+
+For business-logic endpoints:
+  9. One scenario per decision outcome (e.g. APPROVED/REJECTED/PENDING)
+  10. Data-driven using Examples: table or karate.read() from testdata/ JSON
+
+TAGGING RULES — apply precisely:
+  Every feature:                @smoke
+  Read-only GETs (health):      @smoke @prod-safe @health
+  Auth validation (no writes):  @smoke @prod-safe @auth
+  Performance checks:           @smoke @prod-safe @performance
+  Write operations:             @smoke @qa @sit     (NEVER @prod-safe)
+  Business flows:               @smoke @qa @sit @business
+
+EVERY scenario must:
+  - Use: * def correlationId = 'test-' + java.util.UUID.randomUUID()
+  - Use headers defaultHeaders from karate-config.js (Authorization is global)
+  - Never hardcode URL — always compose from baseUrl
+  - Assert status code AND at least 3 response body fields
+  - Use #notnull for dynamic fields (IDs, timestamps)
+  - Never use Thread.sleep — use karate retry or polling helper
+
+EXAMPLE scenario for an @EnableOAuth endpoint returning Page<DTO>:
+
+  @smoke @qa @sit @business
+  Feature: Client Onboarding — Fetch Dashboard Requests
+
+    Scenario: Happy path — paginated dashboard requests
+      * def correlationId = 'test-' + java.util.UUID.randomUUID()
+      Given url baseUrl + '/requests'
+      And headers defaultHeaders
+      And header x-correlation-id = correlationId
+      And request
+        """
+        {
+          "status":      "PENDING",
+          "environment": "DEV",
+          "columnName":  "clientName",
+          "columnValue": "test",
+          "pageNumber":  0,
+          "pageSize":    10,
+          "sort":        "createdAt,desc"
+        }
+        """
+      When method post
+      Then status 200
+      And match response.content        == '#array'
+      And match response.totalElements  == '#number'
+      And match response.totalPages     == '#number'
+      And match response.size           == 10
+      And match response.number         == 0
+      And match response.pageable       == '#object'
+      And assert responseTime < 2000
+
+    Scenario: Empty result for unknown status
+      Given url baseUrl + '/requests'
+      And headers defaultHeaders
+      And request { "status": "UNKNOWN_STATUS_XYZ", "pageNumber": 0, "pageSize": 10 }
+      When method post
+      Then status 200
+      And match response.content       == '#[]'
+      And match response.totalElements == 0
+
+    Scenario: Empty body returns 400
+      Given url baseUrl + '/requests'
+      And headers defaultHeaders
+      And request {}
+      When method post
+      Then status 400
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 9 — WRITE PROD-SMOKE FEATURES (read-only, safe for production)
+────────────────────────────────────────────────────────────────────────────────
+
+health-readiness.feature (@prod-safe @smoke @health):
+  Scenario: Actuator health is UP → GET /actuator/health → 200, response.status == 'UP'
+  Scenario: Liveness probe → GET /actuator/health/liveness → 200
+  Scenario: Readiness probe → GET /actuator/health/readiness → 200
+
+auth-validation.feature (@prod-safe @smoke @auth):
+  Scenario: Request without token to @EnableOAuth endpoint returns 401
+    (use a GET endpoint with @EnableOAuth — no data creation)
+  Scenario: Valid token returns 200 (proves OAuth chain is healthy end-to-end)
+
+performance-sla.feature (@prod-safe @smoke @performance):
+  Scenario: Health endpoint responds within 1000ms
+  Scenario: A protected GET endpoint with valid token responds within 2000ms
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 10 — WRITE TEST DATA AND PAYLOAD FILES
+────────────────────────────────────────────────────────────────────────────────
+
+For each entity in Step 1:
+  src/test/resources/testdata/[entity-plural].json
+  Structure: { "profiles": { "happy": {...}, "rejection": {...}, "boundary": {...} },
+               "bulkSubmissions": [{...}, {...}, {...}] }
+
+For each endpoint:
+  src/test/resources/payloads/[endpoint-name].json  (minimal valid request body)
+
+For each response type:
+  src/test/resources/schemas/[response-name]-schema.json
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 11 — VERIFY EVERYTHING WORKS IN BOTH MODES
+────────────────────────────────────────────────────────────────────────────────
+
+MODE A — LOCAL / CI (fake OAuth, H2 — NO real services needed):
+
+  1. Compile:
+       mvn compile test-compile        OR   ./gradlew testClasses
+
+  2. Run component tests:
+       mvn test -Pcomponent            OR   ./gradlew test
+
+  3. Start app with test profile (loads FakeOAuthServer + H2):
+       mvn spring-boot:run -Dspring-boot.run.profiles=test
+       OR
+       ./gradlew bootRun --args="--spring.profiles.active=test"
+
+  4. Run Karate smoke tests:
+       mvn verify -Psmoke -Dservice.base-url=http://localhost:8080
+       OR
+       ./gradlew karateSmoke -Pservice.base-url=http://localhost:8080
+
+     The fake OAuth server accepts ANY non-empty Bearer token. The @EnableOAuth
+     library executes its full validation flow against the fake endpoints.
+
+MODE B — QA / SIT / PROD (real Hydra, STS, EA, Oracle):
+
+  5. Production deployment uses application-qa.properties / application-prod.properties
+     with REAL oauth.* URLs. The FakeOAuthServer is NEVER loaded because:
+       - Spring profile is qa/prod (not test)
+       - oauth.fake-server.enabled property is not set (or set to false)
+
+  6. Karate uses a real STS-issued token:
+       mvn verify -Psmoke \
+         -Dservice.base-url=https://client-onboard.qa.idfc.internal \
+         -Dauth.token=eyJ...real-token-from-STS...
+
+  Fix any failures before reporting success.
+
+  Final report must include:
+    - Total scenarios created
+    - Which controllers have @EnableOAuth and their allowedScope values
+    - Which endpoints are unprotected
+    - Endpoints skipped and why
+    - Commands for: local, CI, QA team, production team
+
+────────────────────────────────────────────────────────────────────────────────
+HARD CONSTRAINTS — never violate these
+────────────────────────────────────────────────────────────────────────────────
+  - Do NOT modify the internal OAuth library
+  - Do NOT modify any existing @RestController, @Service, or @EnableOAuth annotation
+  - Do NOT modify any existing test classes — only ADD new ones
+  - Do NOT hardcode URLs or credentials in feature files
+  - Do NOT tag any POST/PUT/DELETE as @prod-safe
+  - Do NOT use Thread.sleep in any feature file
+  - Do NOT add Docker, Testcontainers, WireMock, embedded Kafka, or LocalStack
+  - Only new dependencies allowed:
+      io.karatelabs:karate-junit5:1.5.1
+      com.h2database:h2 (test scope only)
+
+────────────────────────────────────────────────────────────────────────────────
+HOW TO EXPLAIN THIS TO YOUR TEAM (one paragraph)
+────────────────────────────────────────────────────────────────────────────────
+We do not bypass @EnableOAuth and we do not modify the internal OAuth library.
+Instead, during Karate tests we run a small @RestController in the same Spring
+Boot JVM that exposes /fake-oauth/* endpoints (introspect, token, decrypt,
+validate, jwks). Then via application-test.properties we point the library's
+hydraServerBaseURL / stsServerBaseURL / hydraDecryptionServiceBaseURL /
+eaServerBaseURL at http://localhost:${server.port}/fake-oauth. The library
+executes its full OAuth validation flow exactly as in production — calling
+introspection, validating scope dev-portal-suite, etc. — but the responses come
+from our in-process fake controller that always returns active=true with the
+required scope. Production is unaffected: the fake controller is loaded only
+when both spring.profiles.active=test AND oauth.fake-server.enabled=true.
+
+================================================================================
+  END OF PROMPT
+================================================================================
