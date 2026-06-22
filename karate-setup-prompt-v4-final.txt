@@ -234,10 +234,35 @@ Create src/test/resources/karate-config.js:
     var baseUrl = karate.properties['service.base-url']
                   || java.lang.System.getenv('SERVICE_BASE_URL') || '';
 
+    // baseUrl is ALWAYS required — you cannot hit any endpoint without it.
     if (baseUrl === '') {
       throw 'service.base-url is required. Use -Dservice.base-url=https://your-app.qa.internal';
     }
 
+    karate.configure('connectTimeout', 5000);
+    karate.configure('readTimeout',    15000);
+    karate.configure('retry', { count: 10, interval: 250 });
+    karate.configure('logPrettyRequest',  true);
+    karate.configure('logPrettyResponse', true);
+
+    var config = {
+      env:       env,
+      baseUrl:   baseUrl,
+      authToken: null,
+      defaultHeaders: {
+        'Content-Type':     'application/json',
+        'x-correlation-id': 'test-' + java.util.UUID.randomUUID()
+      }
+    };
+
+    // ── STS credentials are OPTIONAL ───────────────────────────────────────────
+    // If supplied  → fetch ONE Bearer token for the whole suite (cached by
+    //                Karate) and inject it on every request.
+    // If NOT supplied → run UNAUTHENTICATED. The @prod-safe @health and
+    //                @performance read-only checks still pass; secured endpoints
+    //                correctly return 401. This lets a quick health gate run
+    //                without provisioning STS creds, instead of failing every
+    //                scenario at config load.
     var stsTokenUrl  = karate.properties['sts.token.url']
                        || java.lang.System.getenv('STS_TOKEN_URL') || '';
     var clientId     = karate.properties['sts.client.id']
@@ -248,41 +273,36 @@ Create src/test/resources/karate-config.js:
                        || java.lang.System.getenv('STS_SCOPE')
                        || 'dev-portal-suite';
 
-    if (stsTokenUrl === '' || clientId === '' || clientSecret === '') {
-      throw 'STS credentials are required: sts.token.url, sts.client.id, sts.client.secret';
+    if (stsTokenUrl !== '' && clientId !== '' && clientSecret !== '') {
+      // ── Fetch token ONCE for entire suite — cached automatically by Karate ───
+      var session = karate.callSingle(
+        'classpath:karate/features/helpers/get-sts-token.feature',
+        { stsTokenUrl: stsTokenUrl, clientId: clientId,
+          clientSecret: clientSecret, scope: scope }
+      );
+      var bearerToken = session.token;
+      config.authToken = bearerToken;
+      karate.log('[karate-config] Token acquired. env=' + env + ' baseUrl=' + baseUrl);
+
+      // Inject Authorization + x-request-id on EVERY request
+      karate.configure('headers', function() {
+        return {
+          'x-request-id':  'auto-' + java.util.UUID.randomUUID(),
+          'Authorization': 'Bearer ' + bearerToken
+        };
+      });
+    } else {
+      karate.log('[karate-config] No STS credentials supplied — running UNAUTHENTICATED. '
+        + 'Only @prod-safe @health / @performance checks will pass; secured endpoints '
+        + 'will return 401. Pass -Dsts.token.url -Dsts.client.id -Dsts.client.secret '
+        + 'to run the full @smoke suite.');
+      // Still tag every request so it is traceable in the gateway/app logs.
+      karate.configure('headers', function() {
+        return { 'x-request-id': 'auto-' + java.util.UUID.randomUUID() };
+      });
     }
 
-    // ── Fetch token ONCE for entire suite — cached automatically by Karate ──────
-    var session = karate.callSingle(
-      'classpath:karate/features/helpers/get-sts-token.feature',
-      { stsTokenUrl: stsTokenUrl, clientId: clientId,
-        clientSecret: clientSecret, scope: scope }
-    );
-    var bearerToken = session.token;
-    karate.log('[karate-config] Token acquired. env=' + env + ' baseUrl=' + baseUrl);
-
-    karate.configure('connectTimeout', 5000);
-    karate.configure('readTimeout',    15000);
-    karate.configure('retry', { count: 10, interval: 250 });
-    karate.configure('logPrettyRequest',  true);
-    karate.configure('logPrettyResponse', true);
-
-    // ── Inject Authorization + x-request-id on EVERY request ───────────────────
-    karate.configure('headers', function() {
-      return {
-        'x-request-id':  'auto-' + java.util.UUID.randomUUID(),
-        'Authorization': 'Bearer ' + bearerToken
-      };
-    });
-
-    return {
-      env:       env,
-      baseUrl:   baseUrl,
-      defaultHeaders: {
-        'Content-Type':     'application/json',
-        'x-correlation-id': 'test-' + java.util.UUID.randomUUID()
-      }
-    };
+    return config;
   }
 
 ────────────────────────────────────────────────────────────────────────────────
@@ -500,6 +520,12 @@ COMMANDS REFERENCE (for your team)
 
   # Existing component tests (JUnit — unchanged, still run the same way)
   mvn test -Pcomponent
+
+  # Quick health gate — NO STS creds needed (only @prod-safe @health/@performance pass)
+  # Maven:
+  mvn verify -Pprod-smoke -Dservice.base-url=https://app.qa.internal -Dkarate.options="--tags @health"
+  # Gradle:
+  ./gradlew karateProdSmoke -Pservice.base-url=https://app.qa.internal
 
   # QA smoke tests
   mvn verify -Psmoke \
