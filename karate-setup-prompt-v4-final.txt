@@ -310,27 +310,42 @@ STEP 5 — WRITE get-sts-token.feature
 ────────────────────────────────────────────────────────────────────────────────
 Create src/test/java/karate/features/helpers/get-sts-token.feature:
 
+  This MUST match how your STS expects credentials. The IDFC EntAuth STS uses
+  multipart/form-data with grant_type=client_credentials. Equivalent curl:
+    curl --request POST \
+      --url https://app.uat-entauth.idfcfirstbank.com/platform/oauth/oauth2/token \
+      --header 'content-type: multipart/form-data' \
+      --form client_id=<client-id> \
+      --form client_secret=<client-secret> \
+      --form scope=dev-portal-suite \
+      --form grant_type=client_credentials
+
   @ignore
   Feature: Fetch Bearer token from STS server using client_credentials grant
 
     Scenario:
       Given url stsTokenUrl
-      And header Content-Type = 'application/x-www-form-urlencoded'
-      And header Authorization = 'Basic ' + karate.toBase64(clientId + ':' + clientSecret)
-      And request 'grant_type=client_credentials&scope=' + scope
+      And multipart field client_id     = clientId
+      And multipart field client_secret = clientSecret
+      And multipart field scope         = scope
+      And multipart field grant_type    = 'client_credentials'
       When method post
       Then status 200
       And match response.access_token == '#notnull'
-      And match response.scope        contains scope
       * def token = response.access_token
-      * karate.log('[get-sts-token] Token expires in: ' + response.expires_in + 's')
+      * karate.log('[get-sts-token] Token acquired, expires in: ' + response.expires_in + 's')
 
-  NOTE: If STS uses form body credentials instead of Basic Auth, change to:
-    And request 'grant_type=client_credentials' +
-                '&client_id=' + clientId +
-                '&client_secret=' + clientSecret +
-                '&scope=' + scope
-  Verify with your Auth/DevOps team which format your STS server expects.
+  NOTE: 'multipart field' makes Karate send content-type: multipart/form-data
+  automatically — do NOT also set a Content-Type header manually.
+
+  ALTERNATE FORMATS (only if your STS differs from the curl above):
+    - x-www-form-urlencoded body:
+        And header Content-Type = 'application/x-www-form-urlencoded'
+        And request 'grant_type=client_credentials&client_id=' + clientId +
+                    '&client_secret=' + clientSecret + '&scope=' + scope
+    - Basic auth header + form body:
+        And header Authorization = 'Basic ' + karate.toBase64(clientId + ':' + clientSecret)
+        And request 'grant_type=client_credentials&scope=' + scope
 
 ────────────────────────────────────────────────────────────────────────────────
 STEP 6 — WRITE KARATE RUNNERS
@@ -535,12 +550,12 @@ COMMANDS REFERENCE (for your team)
     -Dsts.client.secret=<secret> \
     -Dsts.scope=dev-portal-suite
 
-  # UAT smoke tests
+  # UAT smoke tests (real IDFC EntAuth STS path shown)
   mvn verify -Psmoke \
-    -Dservice.base-url=https://app.uat.internal \
-    -Dsts.token.url=https://sts.uat.internal/oauth2/token \
-    -Dsts.client.id=karate-uat-client \
-    -Dsts.client.secret=<secret> \
+    -Dservice.base-url=https://<your-app>.uat.idfcfirstbank.com \
+    -Dsts.token.url=https://app.uat-entauth.idfcfirstbank.com/platform/oauth/oauth2/token \
+    -Dsts.client.id=<uat-client-id> \
+    -Dsts.client.secret=<uat-client-secret> \
     -Dsts.scope=dev-portal-suite
 
   # Production — read-only tests ONLY
